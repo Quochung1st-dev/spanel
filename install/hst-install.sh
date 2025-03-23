@@ -1,4 +1,5 @@
 #!/bin/bash
+# !/bin/bash - Chỉ định trình thông dịch cho tập lệnh.
 
 # ======================================================== #
 #
@@ -13,13 +14,13 @@
 #
 # ======================================================== #
 
-# Am I root?
+# Am I root? - Kiểm tra xem người dùng có phải là root không.
 if [ "x$(id -u)" != 'x0' ]; then
 	echo 'Error: this script can only be executed by root'
 	exit 1
 fi
 
-# Check admin user account
+# Check admin user account - Kiểm tra tài khoản người dùng admin.
 if [ ! -z "$(grep ^admin: /etc/passwd)" ] && [ -z "$1" ]; then
 	echo "Error: user admin exists"
 	echo
@@ -29,7 +30,7 @@ if [ ! -z "$(grep ^admin: /etc/passwd)" ] && [ -z "$1" ]; then
 	exit 1
 fi
 
-# Check admin group
+# Check admin group - Kiểm tra nhóm admin.
 if [ ! -z "$(grep ^admin: /etc/group)" ] && [ -z "$1" ]; then
 	echo "Error: group admin exists"
 	echo
@@ -39,11 +40,11 @@ if [ ! -z "$(grep ^admin: /etc/group)" ] && [ -z "$1" ]; then
 	exit 1
 fi
 
-# Detect OS
+# Detect OS - Phát hiện hệ điều hành (chỉ áp dụng cho Ubuntu).
 if [ -e "/etc/os-release" ] && [ ! -e "/etc/redhat-release" ]; then
 	type=$(grep "^ID=" /etc/os-release | cut -f 2 -d '=')
 	if [ "$type" = "ubuntu" ]; then
-		# Check if lsb_release is installed
+		# Check if lsb_release is installed - Kiểm tra xem lsb_release đã được cài đặt chưa (chỉ áp dụng cho Ubuntu).
 		if [ -e '/usr/bin/lsb_release' ]; then
 			release="$(lsb_release -s -r)"
 			VERSION='ubuntu'
@@ -52,9 +53,6 @@ if [ -e "/etc/os-release" ] && [ ! -e "/etc/redhat-release" ]; then
 			echo "apt-get update && apt-get install lsb-release"
 			exit 1
 		fi
-	elif [ "$type" = "debian" ]; then
-		release=$(cat /etc/debian_version | grep -o "[0-9]\{1,2\}" | head -n1)
-		VERSION='debian'
 	else
 		type="NoSupport"
 	fi
@@ -63,6 +61,7 @@ else
 fi
 
 no_support_message() {
+	# no_support_message - Hiển thị thông báo nếu hệ điều hành không được hỗ trợ.
 	echo "****************************************************"
 	echo "Your operating system (OS) is not supported by"
 	echo "Hestia Control Panel. Officially supported releases:"
@@ -78,7 +77,8 @@ if [ "$type" = "NoSupport" ]; then
 fi
 
 check_wget_curl() {
-	# Check wget
+	# check_wget_curl - Kiểm tra và tải xuống trình cài đặt bằng wget hoặc curl.
+	# Check wget - Kiểm tra wget.
 	if [ -e '/usr/bin/wget' ]; then
 		wget -q https://raw.githubusercontent.com/hestiacp/hestiacp/release/install/hst-install-$type.sh -O hst-install-$type.sh
 		if [ "$?" -eq '0' ]; then
@@ -91,7 +91,7 @@ check_wget_curl() {
 		# fi
 	fi
 
-	# Check curl
+	# Check curl - Kiểm tra curl.
 	if [ -e '/usr/bin/curl' ]; then
 		curl -s -O https://raw.githubusercontent.com/hestiacp/hestiacp/release/install/hst-install-$type.sh
 		if [ "$?" -eq '0' ]; then
@@ -105,7 +105,7 @@ check_wget_curl() {
 	fi
 }
 
-# Check for supported operating system before proceeding with download
+# Check for supported operating system before proceeding with download - Kiểm tra hệ điều hành được hỗ trợ trước khi tiếp tục tải xuống.
 # of OS-specific installer, and throw error message if unsupported OS detected.
 if [[ "$release" =~ ^(11|12|20.04|22.04|24.04)$ ]]; then
 	check_wget_curl $*
