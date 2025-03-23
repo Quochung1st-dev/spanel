@@ -34,3 +34,9 @@ mkdir -p /var/log/nginx
 mkdir -p /var/log/php-fpm
 
 echo "Spanel đã được cài đặt thành công!"
+
+# Đăng ký Spanel CLI
+echo "Đăng ký Spanel CLI..."
+chmod +x bin/spanel.sh
+sudo ln -s /d/xampp/htdocs/spanel/bin/spanel.sh /usr/local/bin/spanel
+echo "Đăng ký Spanel CLI hoàn tất!"
