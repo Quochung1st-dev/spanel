@@ -96,7 +96,7 @@ loglevel notice
 logfile /var/log/redis/redis-server.log
 
 # Memory
-maxmemory 256mb
+maxmemory 1gb
 maxmemory-policy allkeys-lru
 maxmemory-samples 5
 
