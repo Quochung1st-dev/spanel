@@ -13,7 +13,7 @@ local function is_ssl()
         return "1"
     end
     -- Check port
-    local port = var-server_port
+    local port = var.server_port
     if port == "443" then
         return "1"
     end

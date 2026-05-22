@@ -29,7 +29,7 @@ end
 -- Ghi log WAF nếu có
 local function log_waf_event()
     if var.waf_check_result ~= "pass" then
-        local log_file = assert(io.open("/opt/spanel/logs/waf/ blocked.log", "a"))
+        local log_file = assert(io.open("/var/server/logs/waf/blocked.log", "a"))
         if log_file then
             local entry = string.format(
                 "[%s] %s - Rule: %s | Var: %s | URI: %s\n",
