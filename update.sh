@@ -50,7 +50,6 @@ check_spanel_installed() {
 update_bin_scripts() {
     log_info "Cập nhật bin scripts..."
 
-    # Copy bin scripts
     if [[ -d "$SCRIPT_DIR/bin" ]]; then
         mkdir -p "$SPANEL_DIR/bin"
         cp -rf "$SCRIPT_DIR/bin/"* "$SPANEL_DIR/bin/"
@@ -60,16 +59,8 @@ update_bin_scripts() {
         log_warn "Không tìm thấy $SCRIPT_DIR/bin"
     fi
 
-    # Update symlinks
-    local bin_links=(
-        "v-check-vps"
-        "v-manager-domain"
-        "v-add-domain"
-        "v-change-domain"
-        "v-delete-domain"
-    )
-
-    for bin in "${bin_links[@]}"; do
+    local bin_links="v-check-vps v-manager-domain v-add-domain v-change-domain v-delete-domain"
+    for bin in $bin_links; do
         if [[ -f "$SPANEL_DIR/bin/$bin" ]]; then
             ln -sf "$SPANEL_DIR/bin/$bin" "/usr/local/bin/$bin"
         fi
@@ -84,28 +75,24 @@ update_bin_scripts() {
 update_data() {
     log_info "Cập nhật data..."
 
-    # Nginx configs
     if [[ -d "$SCRIPT_DIR/data/nginx" ]]; then
         mkdir -p "$SPANEL_DIR/nginx/conf"
         cp -rf "$SCRIPT_DIR/data/nginx/"* "$SPANEL_DIR/nginx/conf/"
         log_info "Đã cập nhật nginx configs"
     fi
 
-    # Lua scripts
     if [[ -d "$SCRIPT_DIR/data/lua" ]]; then
         mkdir -p "$SPANEL_DIR/lua"
         cp -rf "$SCRIPT_DIR/data/lua/"* "$SPANEL_DIR/lua/"
         log_info "Đã cập nhật lua scripts"
     fi
 
-    # WAF rules
     if [[ -d "$SCRIPT_DIR/data/waf" ]]; then
         mkdir -p "$SPANEL_DIR/waf"
         cp -rf "$SCRIPT_DIR/data/waf/"* "$SPANEL_DIR/waf/"
         log_info "Đã cập nhật waf rules"
     fi
 
-    # Copy .env nếu cần
     if [[ -f "$SCRIPT_DIR/.env" ]] && [[ ! -f "$SPANEL_DIR/.env" ]]; then
         cp "$SCRIPT_DIR/.env" "$SPANEL_DIR/.env"
         chmod 600 "$SPANEL_DIR/.env"
@@ -120,12 +107,14 @@ update_data() {
 reload_services() {
     log_info "Reload services..."
 
-    # Reload nginx
     if [[ -f "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
         if pgrep -x nginx > /dev/null 2>&1; then
-            "$OPENRESTY_DIR/nginx/sbin/nginx" -s reload 2>/dev/null || \
-                ("$OPENRESTY_DIR/nginx/sbin/nginx" -t && "$OPENRESTY_DIR/nginx/sbin/nginx" -s reload")
-            log_info "Đã reload nginx"
+            if "$OPENRESTY_DIR/nginx/sbin/nginx" -t 2>/dev/null; then
+                "$OPENRESTY_DIR/nginx/sbin/nginx" -s reload
+                log_info "Đã reload nginx"
+            else
+                log_warn "Nginx config lỗi, bỏ qua reload"
+            fi
         else
             log_warn "Nginx không chạy, bỏ qua reload"
         fi
@@ -133,13 +122,11 @@ reload_services() {
         log_warn "Nginx chưa cài đặt"
     fi
 
-    # Restart CrowdSec
     if systemctl is-active --quiet crowdsec 2>/dev/null; then
         systemctl restart crowdsec
         log_info "Đã restart crowdsec"
     fi
 
-    # Restart SPanel service
     if [[ -f /etc/systemd/system/spanel.service ]]; then
         systemctl restart spanel 2>/dev/null || true
         log_info "Đã restart spanel service"
@@ -152,13 +139,12 @@ reload_services() {
 
 main() {
     echo ""
-    echo -e "${BLUE}========================================${NC}"
+    echo "========================================"
     echo -e "${BLUE}  SPanel Update${NC}"
-    echo -e "${BLUE}========================================${NC}"
+    echo "========================================"
     echo ""
-
-    log_info "Source: $SCRIPT_DIR"
-    log_info "Target: $SPANEL_DIR"
+    echo "Source: $SCRIPT_DIR"
+    echo "Target: $SPANEL_DIR"
     echo ""
 
     check_root
@@ -172,7 +158,7 @@ main() {
 
     echo ""
     echo "========================================"
-    echo -e "${GREEN}ĐÃ CẬP NHẬT SPANEL${NC}"
+    echo -e "${GREEN}  DA CAP NHAT SPANEL${NC}"
     echo "========================================"
     echo ""
 }
