@@ -88,6 +88,12 @@ install_crowdsec() {
 configure_crowdsec() {
     log_info "Cấu hình CrowdSec cho OpenResty..."
 
+    # Kiểm tra config tồn tại
+    if [[ ! -f /etc/crowdsec/config.yaml ]]; then
+        log_warn "CrowdSec config không tồn tại - bỏ qua cấu hình"
+        return 0
+    fi
+
     # Tạo thư mục config
     mkdir -p "$SPANEL_DIR/crowdsec"
 
@@ -97,12 +103,12 @@ configure_crowdsec() {
         log_info "Đã copy CrowdSec config"
     fi
 
-    # Register Nginx scenario
-    cscli collections install crowdsecurity/nginx || true
-    cscli scenarios install crowdsecurity/http-crawl && true || true
+    # Register Nginx scenario (bỏ qua lỗi nếu có)
+    cscli collections install crowdsecurity/nginx 2>/dev/null || log_warn "Không cài được crowdsecurity/nginx"
+    cscli scenarios install crowdsecurity/http-crawl 2>/dev/null || log_warn "Không cài được http-crawl"
 
     # Update GeoIP database
-    cscli collections install crowdsecurity/geoip-database || true
+    cscli collections install crowdsecurity/geoip-database 2>/dev/null || log_warn "Không cài được geoip-database"
 
     # Restart CrowdSec
     systemctl restart crowdsec 2>/dev/null || true
