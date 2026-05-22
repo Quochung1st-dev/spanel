@@ -1,0 +1,107 @@
+--==============================================================================
+# XSS Rules
+# SPanel WAF - Cross-Site Scripting Detection
+#==============================================================================
+
+# Script tags
+xss:<script
+xss:</script
+xss:<script\s+
+xss:src\s*=
+
+# Event handlers
+xss:onerror\s*=
+xss:onload\s*=
+xss:onclick\s*=
+xss:onmouseover\s*=
+xss:onmouseout\s*=
+xss:onfocus\s*=
+xss:onblur\s*=
+xss:onchange\s*=
+xss:onsubmit\s*=
+xss:onreset\s*=
+xss:onkeydown\s*=
+xss:onkeyup\s*=
+xss:onkeypress\s*=
+xss:ondblclick\s*=
+xss:onabort\s*=
+xss:onresize\s*=
+xss:onscroll\s*=
+
+# JavaScript protocols
+xss:javascript\s*:
+xss:js\s*:
+xss:vbscript\s*:
+xss:data\s*:
+
+# Dangerous JS functions
+xss:eval\s*\(
+xss:execScript\s*\(
+xss:exec\s*\(
+xss:Function\s*\(
+xss:setTimeout\s*\(
+xss:setInterval\s*\(
+xss:clearTimeout\s*
+xss:clearInterval\s*
+
+# Document methods
+xss:document\.cookie
+xss:document\.domain
+xss:document\.write
+xss:document\.writeln
+xss:document\.getElementById
+xss:getElementsByTagName\s*\(
+xss:getElementsByClassName\s*\(
+xss:querySelector\s*\(
+xss:querySelectorAll\s*\(
+xss:innerHTML\s*=
+xss:outerHTML\s*=
+xss:insertAdjacentHTML\s*\(
+xss:createElement\s*\(
+xss:appendChild\s*\(
+xss:removeChild\s*\(
+xss:replaceChild\s*\(
+xss:adoptNode\s*\(
+xss:cloneNode\s*\(
+xss:importNode\s*\(
+
+# Window methods
+xss:window\.location
+xss:window\.open\s*\(
+xss:window\.close\s*
+xss:window\.parent
+xss:window\.top
+xss:window\.frames
+xss:window\.opener
+xss:top\.location
+xss:parent\.location
+
+# Alert/prompt/confirm
+xss:alert\s*\(
+xss:prompt\s*\(
+xss:confirm\s*\(
+xss:print\s*\(
+xss:showModalDialog\s*\(
+xss:showModelessDialog\s*\(
+
+# Prototype pollution
+xss:__proto__
+xss:constructor\.prototype
+xss:__defineGetter__
+xss:__defineSetter__
+
+# Encoding bypasses
+xss:%3Cscript
+xss:%3C/script
+xss:%3Cscript%3E
+xss:&#60script
+xss:&#x3cscript
+xss:javascri&#112;t
+xss:java%00script
+xss:%5Cs%5Ccript
+
+# Null byte bypasses
+xss:\x3cscript
+xss:\x3c/script
+xss:<script
+xss:</script

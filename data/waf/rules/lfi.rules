@@ -1,0 +1,123 @@
+--==============================================================================
+# LFI/RFI Rules
+# SPanel WAF - Local/Remote File Inclusion Detection
+#==============================================================================
+
+# Directory traversal
+lfi:../..
+lfi:..%2f..%2f
+lfi:..%252f..%252f
+lfi:%2e%2e%2f%2e%2e%2f
+lfi:%2e%2e/%2e%2e/
+lfi:..\;/
+lfi:..\\
+lfi:.../.../
+lfi:..../..../
+lfi:/..\
+lfi:..\..\..
+lfi:/%2e%2e%2f%2e%2e%2f
+
+# Common LFI targets
+lfi:/etc/passwd
+lfi:/etc/shadow
+lfi:/etc/group
+lfi:/etc/hosts
+lfi:/etc/passwd$
+lfi:/etc/shadow$
+lfi:/etc/motd
+lfi:/etc/issue
+lfi:/etc/hostname
+lfi:/etc/resolv.conf
+
+# Apache/Nginx config files
+lfi:/etc/apache2/apache2.conf
+lfi:/etc/apache2/sites-enabled/
+lfi:/etc/httpd/httpd.conf
+lfi:/etc/httpd/conf/httpd.conf
+lfi:/etc/nginx/nginx.conf
+lfi:/etc/nginx/sites-enabled/
+lfi:/var/log/apache2/
+lfi:/var/log/httpd/
+lfi:/var/log/nginx/
+
+# Log files (for log poisoning)
+lfi:/var/log/apache2/access.log
+lfi:/var/log/apache2/error.log
+lfi:/var/log/httpd/access_log
+lfi:/var/log/httpd/error_log
+lfi:/var/log/nginx/access.log
+lfi:/var/log/nginx/error.log
+lfi:/var/log/messages
+lfi:/var/log/secure
+lfi:/var/log/auth.log
+
+# Shell files
+lfi:/bin/bash
+lfi:/bin/sh
+lfi:/usr/bin/bash
+lfi:/usr/bin/sh
+lfi:/etc/passwd
+lfi:/etc/shadow
+lfi:/etc/sudoers
+
+# PHP configuration
+lfi:/etc/php/
+lfi:/etc/php/*/php.ini
+lfi:/etc/php.ini
+lfi:/usr/local/etc/php.ini
+lfi:/var/www/html/php.ini
+
+# Database files
+lfi:/var/lib/mysql/
+lfi:/etc/mysql/
+lfi:/var/lib/pgsql/
+
+# SSH keys
+lfi:/root/.ssh/
+lfi:/home/*/.ssh/
+lfi:/root/.ssh/authorized_keys
+lfi:/root/.ssh/id_rsa
+lfi:/root/.ssh/id_rsa.pub
+
+# Environment files
+lfi:/proc/self/environ
+lfi:/proc/self/fd/
+lfi:/proc/environ
+lfi:/proc/version
+lfi:/proc/cmdline
+lfi:/proc/self/cmdline
+
+# Windows LFI targets (when running on Windows)
+lfi:C:\\Windows\\System32\\
+lfi:C:\\Windows\\System32\\config\\
+lfi:C:\\Windows\\win.ini
+lfi:C:\\boot.ini
+lfi:C:\\xampp\\apache\\conf\\
+lfi:C:\\xampp\\mysql\\
+lfi:C:\\Program Files\\
+
+# Null byte injection
+lfi:%00
+lfi:\x00
+lfi:\0
+lfi:%2500
+
+# Double encoding
+lfi:%252e%252e%252f
+lfi:%252e%252e/
+lfi:%2e%2e%2f
+
+# Character insertion
+lfi:;\x00
+lfi:.\x00
+lfi:/\x00
+lfi:%00\x00
+
+# Remote file inclusion patterns (RFI)
+rfi:https?://
+rfi:ftp://
+rfi:php://
+rfi:expect://
+rfi:input://
+rfi:data://
+rfi:phar://

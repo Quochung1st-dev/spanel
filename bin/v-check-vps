@@ -1,0 +1,132 @@
+#!/bin/bash
+#==============================================================================
+# v-check-vps
+# Kiểm tra thông tin VPS/Server
+#==============================================================================
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}  SPanel - VPS System Information${NC}"
+echo -e "${BLUE}========================================${NC}"
+echo ""
+
+#------------------------------------------------------------------------------
+# Thông tin hệ thống
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[1] Thông tin Hệ thống${NC}"
+echo "----------------------------------------"
+echo "Hostname: $(hostname)"
+echo "OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)"
+echo "Kernel: $(uname -r)"
+echo "Uptime: $(uptime -p 2>/dev/null || uptime)"
+echo ""
+
+#------------------------------------------------------------------------------
+# CPU
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[2] CPU${NC}"
+echo "----------------------------------------"
+echo "Model: $(cat /proc/cpuinfo | grep "model name" | head -1 | cut -d':' -f2 | sed 's/^ //')"
+echo "Cores: $(nproc)"
+echo "Architecture: $(uname -m)"
+echo ""
+
+#------------------------------------------------------------------------------
+# Memory
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[3] Memory${NC}"
+echo "----------------------------------------"
+free -h
+echo ""
+
+#------------------------------------------------------------------------------
+# Disk
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[4] Disk${NC}"
+echo "----------------------------------------"
+df -h | grep -E '^/dev/'
+echo ""
+
+#------------------------------------------------------------------------------
+# Network
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[5] Network${NC}"
+echo "----------------------------------------"
+echo "IP Address: $(hostname -I | awk '{print $1}')"
+echo "Default Gateway: $(ip route | grep default | awk '{print $3}')"
+echo ""
+
+#------------------------------------------------------------------------------
+# Port đang listen
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[6] Ports đang listen${NC}"
+echo "----------------------------------------"
+ss -tlnp | grep -E '(:80|:443|:22)' || netstat -tlnp | grep -E '(:80|:443|:22)' 2>/dev/null || echo "Không thể kiểm tra ports"
+echo ""
+
+#------------------------------------------------------------------------------
+# Service Status
+#------------------------------------------------------------------------------
+
+echo -e "${GREEN}[7] Service Status${NC}"
+echo "----------------------------------------"
+
+check_service() {
+    local service=$1
+    if systemctl is-active --quiet $service 2>/dev/null; then
+        echo -e "$service: ${GREEN}running${NC}"
+    elif pgrep -x $service > /dev/null; then
+        echo -e "$service: ${YELLOW}running (no systemd)${NC}"
+    else
+        echo -e "$service: ${RED}stopped${NC}"
+    fi
+}
+
+check_service "nginx"
+check_service "spanel"
+
+echo ""
+
+#------------------------------------------------------------------------------
+# SPanel Info
+#------------------------------------------------------------------------------
+
+if [[ -d /var/server ]]; then
+    echo -e "${GREEN}[8] SPanel Info${NC}"
+    echo "----------------------------------------"
+    echo "Install Dir: /var/server"
+    echo "Version: ${SPANEL_VERSION:-1.0.0}"
+
+    if [[ -f /var/server/.env ]]; then
+        echo "Config: /var/server/.env ${GREEN}(exists)${NC}"
+    else
+        echo "Config: /var/server/.env ${RED}(missing)${NC}"
+    fi
+
+    echo ""
+    echo "Domains:"
+    if [[ -d $SPANEL_DIR/nginx/sites-enabled ]]; then
+        ls $SPANEL_DIR/nginx/sites-enabled/ 2>/dev/null | wc -l
+        echo " domains enabled"
+    else
+        echo " 0 domains enabled"
+    fi
+fi
+
+echo ""
+echo -e "${BLUE}========================================${NC}"
+echo "Check completed at $(date '+%Y-%m-%d %H:%M:%S')"
+echo -e "${BLUE}========================================${NC}"

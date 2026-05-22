@@ -1,0 +1,91 @@
+--==============================================================================
+# SQL Injection Rules
+# SPanel WAF - SQL Injection Detection
+#==============================================================================
+
+# Common SQL injection patterns
+
+# UNION based attacks
+sql:union\s+select
+sql:union\s+all\s+select
+sql:union\s+select\s+from
+sql:union\s+all\s+select\s+from
+
+# SELECT statements
+sql:select\s+.*\s+from
+sql:select\s+from\s+
+sql:select\s+\d+\s+from
+
+# INSERT statements
+sql:insert\s+into
+sql:insert\s+\w+\s+values
+
+# UPDATE statements
+sql:update\s+.*\s+set
+sql:update\s+\w+\s+set
+
+# DELETE statements
+sql:delete\s+from
+sql:delete\s+.*\s+from
+
+# DROP statements
+sql:drop\s+table
+sql:drop\s+database
+sql:drop\s+index
+
+# Execution functions
+sql:exec\s*\(
+sql:execute\s*\(
+sql:benchmark\s*\(
+sql:sleep\s*\(
+sql:pg_sleep\s*\(
+sql:waitfor\s+delay
+
+# Comment based attacks
+sql:'\s*--\s*$
+sql:#\s*$
+sql:/\*.*\*/
+
+# OR based attacks (1=1, '1'='1, etc.)
+sql:'\s*or\s*'1'\s*=\s*'1
+sql:'\s*or\s*1\s*=\s*1
+sql:"\s*or\s*1\s*=\s*1
+sql:or\s+1\s*=\s*1\s*--\s*$
+sql:'\s*or\s+'1'\s*=\s*'1
+
+# AND based attacks
+sql:'\s*and\s*'1'\s*=\s*'1
+sql:and\s+1\s*=\s*1
+
+# Stacked queries
+sql:;\s*drop\s+
+sql:;\s*delete\s+
+sql:;\s*update\s+
+sql:;\s*insert\s+
+sql:;\s*exec\s+
+
+# UNION with hex/char bypasses
+sql:0x[0-9a-f]+
+sql:char\s*\(\s*\d+\s*\)
+
+# Information gathering
+sql:information_schema
+sql:sys\.databases
+sql:sys\.objects
+sql:sys\.tables
+sql:mysql\.db
+sql:pg_catalog
+sql:sqlite_master
+
+# Error-based injection
+sql:extractvalue\s*\(
+sql:updatexml\s*\(
+sql:exp\s*\(\s*~
+
+# Time-based blind injection
+sql:if\s*\(\s*\w+\s*,\s*\d+\s*,\s*\d+\s*\)
+
+# Load file / into outfile
+sql:load_file\s*\(
+sql:into\s+outfile\s*
+sql:into\s+dumpfile\s*

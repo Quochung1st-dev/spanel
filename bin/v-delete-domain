@@ -1,0 +1,245 @@
+#!/bin/bash
+#==============================================================================
+# v-delete-domain
+# Xóa domain khỏi SPanel
+#==============================================================================
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+NGINX_CONF_DIR="$SPANEL_DIR/nginx"
+SPANEL_USER="${SPANEL_USER:-spanel}"
+SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
+
+#------------------------------------------------------------------------------
+# Disable domain (remove symlink)
+#------------------------------------------------------------------------------
+
+disable_domain() {
+    local domain=$1
+
+    log_info "Disable domain $domain..."
+
+    local enabled_link="$NGINX_CONF_DIR/sites-enabled/$domain.conf"
+
+    if [[ -L $enabled_link ]]; then
+        rm $enabled_link
+        log_info "Đã disable $domain"
+    else
+        log_warn "$domain chưa được enable hoặc không tồn tại"
+    fi
+
+    # Reload nginx
+    $SPANEL_DIR/nginx/sbin/nginx -s reload 2>/dev/null || true
+}
+
+#------------------------------------------------------------------------------
+# Backup domain data trước khi xóa
+#------------------------------------------------------------------------------
+
+backup_domain() {
+    local domain=$1
+    local backup_dir="${2:-$SPANEL_DIR/backups}"
+
+    log_info "Backup dữ liệu domain $domain..."
+
+    mkdir -p $backup_dir
+
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_file="$backup_dir/${domain}_${timestamp}.tar.gz"
+
+    if [[ -d $SCRIPT_DIR/var/www/$domain ]]; then
+        tar -czf $backup_file -C $SPANEL_DIR/var/www $domain
+        log_info "Đã backup vào $backup_file"
+    fi
+
+    # Backup SSL cert nếu có
+    if [[ -d $SPANEL_DIR/ssl/$domain ]]; then
+        mkdir -p $backup_dir/ssl
+        tar -czf "$backup_dir/ssl/${domain}_${timestamp}.tar.gz" -C $SPANEL_DIR/ssl $domain
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Delete domain files and configs
+#------------------------------------------------------------------------------
+
+delete_domain() {
+    local domain=$1
+    local backup=${2:-true}
+
+    log_info "Xóa domain $domain..."
+
+    # Backup trước khi xóa
+    if [[ $backup == true ]]; then
+        backup_domain $domain
+    fi
+
+    # Disable domain trước
+    disable_domain $domain
+
+    # Xóa Nginx config
+    rm -f $NGINX_CONF_DIR/sites-available/$domain.conf
+    log_info "Đã xóa Nginx config"
+
+    # Xóa thư mục domain
+    rm -rf $SCRIPT_DIR/var/www/$domain
+    log_info "Đã xóa thư mục domain"
+
+    # Xóa SSL cert (nếu có)
+    if [[ -d $SPANEL_DIR/ssl/$domain ]]; then
+        rm -rf $SPANEL_DIR/ssl/$domain
+        log_info "Đã xóa SSL certificate"
+    fi
+
+    # Xóa logs cũ
+    rm -rf $SPANEL_DIR/logs/$domain 2>/dev/null || true
+
+    log_info "Đã xóa hoàn toàn domain $domain"
+}
+
+#------------------------------------------------------------------------------
+# List domain backups
+#------------------------------------------------------------------------------
+
+list_backups() {
+    local backup_dir="${1:-$SPANEL_DIR/backups}"
+
+    echo -e "${BLUE}[ Domain Backups ]${NC}"
+    echo ""
+
+    if [[ -d $backup_dir ]]; then
+        ls -lh $backup_dir/*.tar.gz 2>/dev/null | tail -10
+    else
+        echo "Không có backup nào"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Restore domain from backup
+#------------------------------------------------------------------------------
+
+restore_domain() {
+    local domain=$1
+    local backup_file=$2
+
+    log_info "Restore domain $domain từ $backup_file..."
+
+    if [[ ! -f $backup_file ]]; then
+        log_error "Backup file không tồn tại: $backup_file"
+        return 1
+    fi
+
+    # Disable domain trước (nếu đang enable)
+    disable_domain $domain
+
+    # Xóa domain hiện tại (không backup lại)
+    rm -rf $SCRIPT_DIR/var/www/$domain 2>/dev/null || true
+
+    # Extract backup
+    tar -xzf $backup_file -C $SPANEL_DIR/var/www
+
+    # Tạo lại symlink
+    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    if [[ -f $conf_file ]]; then
+        ln -sf $conf_file $NGINX_CONF_DIR/sites-enabled/$domain.conf
+    fi
+
+    # Reload nginx
+    $SPANEL_DIR/nginx/sbin/nginx -s reload
+
+    log_info "Đã restore domain $domain"
+}
+
+#------------------------------------------------------------------------------
+# Show help
+#------------------------------------------------------------------------------
+
+show_help() {
+    echo -e "${BLUE}v-delete-domain - Xóa domain khỏi SPanel${NC}"
+    echo ""
+    echo "Usage: $0 <command> [arguments]"
+    echo ""
+    echo "Commands:"
+    echo "  delete <domain> [backup]     Xóa domain (backup=true|false)"
+    echo "  disable <domain>           Disable domain (không xóa)"
+    echo "  list-backups               Liệt kê các backup"
+    echo "  restore <domain> <file>    Khôi phục domain từ backup"
+    echo ""
+    echo "Examples:"
+    echo "  $0 delete example.com              # Xóa domain và backup trước"
+    echo "  $0 delete example.com false        # Xóa domain không backup"
+    echo "  $0 disable example.com             # Chỉ disable, không xóa"
+    echo "  $0 restore example.com backup.tar.gz"
+    echo ""
+    echo "Lưu ý:"
+    echo "  - Khi xóa domain, dữ liệu sẽ được backup trước vào $SPANEL_DIR/backups"
+    echo "  - Để xóa vĩnh viễn không backup, dùng: delete <domain> false"
+}
+
+#------------------------------------------------------------------------------
+# MAIN
+#------------------------------------------------------------------------------
+
+main() {
+    local command=${1:-help}
+
+    case $command in
+        delete)
+            local domain=$2
+            local backup=${3:-true}
+
+            if [[ -z $domain ]]; then
+                log_error "Domain không được để trống"
+                show_help
+                exit 1
+            fi
+
+            # Confirm
+            echo -e "${RED}Cảnh báo: Domain $domain sẽ bị xóa!${NC}"
+            read -p "Nhập 'yes' để xác nhận: " confirm
+            if [[ $confirm != "yes" ]]; then
+                log_info "Đã hủy"
+                exit 0
+            fi
+
+            delete_domain $domain $backup
+            ;;
+        disable)
+            local domain=$2
+
+            if [[ -z $domain ]]; then
+                log_error "Domain không được để trống"
+                exit 1
+            fi
+
+            disable_domain $domain
+            ;;
+        list-backups)
+            list_backups $2
+            ;;
+        restore)
+            restore_domain $2 $3
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        *)
+            log_error "Lệnh không hợp lệ: $command"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

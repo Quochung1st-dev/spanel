@@ -1,0 +1,28 @@
+types {
+    text/html                             html htm shtml;
+    text/css                              css;
+    text/xml                              xml;
+    application/javascript                js;
+    application/atom+xml                  atom;
+    application/rss+xml                   rss;
+    application/json                     json;
+    image/gif                             gif;
+    image/jpeg                            jpeg jpg;
+    image/png                             png;
+    image/webp                            webp;
+    image/svg+xml                         svg svgz;
+    image/x-icon                          ico;
+    font/woff                             woff;
+    font/woff2                            woff2;
+    font/ttf                              ttf;
+    font/eot                              eot;
+    application/vnd.ms-fontobject        eot;
+    application/octet-stream             bin exe dll;
+    application/x-shockwave-flash         swf;
+    application/pdf                      pdf;
+    application/zip                      zip;
+    text/plain                            txt;
+    text/x-c                              c h cpp;
+    text/x-python                         py;
+    text/x-perl                           pl pm;
+}
