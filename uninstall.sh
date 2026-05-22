@@ -63,6 +63,7 @@ confirm_uninstall() {
     echo "  - OpenResty/Nginx"
     echo "  - Lua scripts"
     echo "  - WAF"
+    echo "  - CrowdSec"
     echo "  - SSL certificates"
     echo "  - User và group spanel"
     echo "  - Thư mục $SPANEL_DIR"
@@ -96,13 +97,17 @@ main() {
 
     # Chạy lần lượt các script gỡ (theo thứ tự ngược lại với install)
     # 1. SSL trước (cần remove configs)
-    # 2. WAF
-    # 3. User & Group (cần xóa user trước khi xóa dir)
-    # 4. Lua scripts
-    # 5. Directory (xóa /var/www nếu có --clear)
-    # 6. OpenResty cuối (cần stop nginx trước)
+    # 2. CrowdSec
+    # 3. WAF
+    # 4. User & Group (cần xóa user trước khi xóa dir)
+    # 5. Lua scripts
+    # 6. Directory (xóa /var/www nếu có --clear)
+    # 7. OpenResty cuối (cần stop nginx trước)
     log_section "Gỡ SSL"
     bash "$SCRIPT_DIR/uninstall/ssl.sh"
+
+    log_section "Gỡ CrowdSec"
+    bash "$SCRIPT_DIR/uninstall/crowdsec.sh"
 
     log_section "Gỡ WAF"
     bash "$SCRIPT_DIR/uninstall/waf.sh"

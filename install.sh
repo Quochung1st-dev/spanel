@@ -197,12 +197,14 @@ main() {
     # 2. Cấu hình nginx (nginx.conf, sites-available, conf.d)
     # 3. Lua scripts (copy vào /var/server/lua)
     # 4. WAF rules
-    # 5. SSL certificates
-    # 6. User & Group (tạo cuối để tránh lỗi phân quyền)
+    # 5. CrowdSec (protection layer trên WAF)
+    # 6. SSL certificates
+    # 7. User & Group (tạo cuối để tránh lỗi phân quyền)
     run_install_script "openresty.sh" "OpenResty (Nginx + LuaJIT)"
     run_install_script "nginx.sh" "Nginx Config"
     run_install_script "lua.sh" "Lua Scripts"
     run_install_script "waf.sh" "WAF"
+    run_install_script "crowdsec.sh" "CrowdSec"
     run_install_script "ssl.sh" "SSL"
     run_install_script "user.sh" "User & Group"
 
