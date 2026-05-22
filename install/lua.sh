@@ -18,6 +18,9 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 LUAJIT_VERSION="${LUAJIT_VERSION:-2.1}"
 
+# Xác định SCRIPT_DIR (thư mục source - git clone)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 #------------------------------------------------------------------------------
 # Kiểm tra Lua đã cài đặt chưa
 #------------------------------------------------------------------------------
@@ -79,8 +82,8 @@ install_lua_scripts() {
     local lua_dir="$SPANEL_DIR/lua"
     mkdir -p $lua_dir
 
-    # Copy tất cả script Lua
-    cp -r data/lua/* $lua_dir/
+    # Copy tất cả script Lua từ thư mục source
+    cp -r "$SCRIPT_DIR/data/lua/"* $lua_dir/
 
     # Phân quyền
     chown -R root:root $lua_dir
