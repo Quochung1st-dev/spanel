@@ -81,7 +81,9 @@ run_install_script() {
 
     if [[ -f install/$script ]]; then
         chmod +x install/$script
+        pushd "$SCRIPT_DIR" > /dev/null
         bash install/$script
+        popd > /dev/null
         log_info "Đã cài đặt $name"
     else
         log_warn "Không tìm thấy install/$script, bỏ qua"

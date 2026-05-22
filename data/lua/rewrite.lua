@@ -30,7 +30,7 @@ local function handle_www_redirect(domain)
         end
     elseif config.www_redirect == "from_www" then
         if host:match("^www%.") then
-            local non_www = host:gsub("^www%.)
+            local non_www = host:gsub("^www%.", "")
             return ngx.redirect("https://" .. non_www .. request_uri, ngx.HTTP_MOVED_TEMPORARILY)
         end
     end
