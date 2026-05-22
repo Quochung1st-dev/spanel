@@ -108,12 +108,12 @@ create_vhost() {
     local conf_file="$NGINX_CONF/sites-available/$domain.conf"
 
     if [[ "$enable_ssl" == "yes" ]]; then
-        cat > "$conf_file" << EOF
+        cat > "$conf_file" << 'EOF'
 server {
     listen 80;
     listen [::]:80;
     server_name $domain www.$domain;
-    return 301 https://\$host\$request_uri;
+    return 301 https://$host$request_uri;
 }
 
 server {
@@ -138,7 +138,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
 
     location / {
-        try_files \$uri \$uri/ =404;
+        try_files $uri $uri/ =404;
     }
 
     location ~ \.php\$ {
@@ -169,7 +169,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
 
     location / {
-        try_files \$uri \$uri/ =404;
+        try_files $uri $uri/ =404;
     }
 
     location ~ \.php\$ {
@@ -220,6 +220,7 @@ create_ssl() {
     fi
 
     if [[ "$ssl_type" == "selfsigned" ]] || [[ ! -f "$cert_dir/fullchain.pem" ]]; then
+        OPENSSL_CONF=/etc/ssl/openssl.cnf \
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
             -keyout "$cert_dir/privkey.pem" \
             -out "$cert_dir/fullchain.pem" \

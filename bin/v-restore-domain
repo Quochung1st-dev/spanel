@@ -1,0 +1,218 @@
+#!/bin/bash
+#==============================================================================
+# v-restore-domain
+# Khoi phuc domain tu backup
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+WWW_DIR="/var/www"
+NGINX_CONF="$SPANEL_DIR/nginx/conf"
+BACKUP_DIR="/var/backups"
+
+#------------------------------------------------------------------------------
+# Check root
+#------------------------------------------------------------------------------
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       SPanel - Restore Domain          ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+}
+
+#------------------------------------------------------------------------------
+# Usage
+#------------------------------------------------------------------------------
+
+usage() {
+    echo ""
+    echo "Usage: v-restore-domain <file> [options]"
+    echo ""
+    echo "Options:"
+    echo "  --list     Danh sach backup hien co"
+    echo ""
+    echo "Examples:"
+    echo "  v-restore-domain /var/backups/example.com_20240101.tar.gz"
+    echo "  v-restore-domain --list"
+    exit 1
+}
+
+#------------------------------------------------------------------------------
+# List backups
+#------------------------------------------------------------------------------
+
+list_backups() {
+    echo ""
+    echo -e "${BLUE}── Backup List ──${NC}"
+    echo ""
+
+    if [[ ! -d "$BACKUP_DIR" ]]; then
+        echo "Khong co backup nao"
+        return
+    fi
+
+    local count=0
+    for f in "$BACKUP_DIR"/*.tar.gz; do
+        [[ -f "$f" ]] || continue
+        ((count++))
+        local size=$(du -h "$f" | awk '{print $1}')
+        local date=$(stat -c %y "$f" 2>/dev/null | cut -d' ' -f1 || date -r "$f" +%Y-%m-%d)
+        echo "  $(basename "$f")"
+        echo "    Size: $size | Date: $date"
+    done
+
+    echo ""
+    echo "Total: $count backups"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Restore domain
+#------------------------------------------------------------------------------
+
+restore_domain() {
+    local backup_file=$1
+
+    if [[ -z "$backup_file" ]]; then
+        log_error "Vui long nhap duong dan backup"
+        return 1
+    fi
+
+    if [[ ! -f "$backup_file" ]]; then
+        log_error "File backup khong ton tai: $backup_file"
+        return 1
+    fi
+
+    # Get domain name from filename
+    local filename=$(basename "$backup_file")
+    local domain=$(echo "$filename" | sed 's/_[0-9].*//')
+
+    # Check if backup file is for SSL or config
+    local is_ssl=0
+    local is_conf=0
+    if [[ "$filename" == ssl_* ]]; then
+        is_ssl=1
+        domain=$(echo "$filename" | sed 's/ssl_//' | sed 's/_[0-9].*//')
+    elif [[ "$filename" == conf_* ]]; then
+        is_conf=1
+        domain=$(echo "$filename" | sed 's/conf_//' | sed 's/_[0-9].*//')
+    fi
+
+    print_header
+    echo ""
+    echo "Backup: $filename"
+    echo "Domain: $domain"
+    echo ""
+
+    if [[ "$is_ssl" == "1" ]]; then
+        # Restore SSL
+        log_info "Khoi phuc SSL..."
+        mkdir -p "$SPANEL_DIR/ssl/$domain"
+        tar -xzf "$backup_file" -C "$SPANEL_DIR/ssl" 2>/dev/null
+        log_info "SSL da khoi phuc thanh cong"
+        return 0
+    fi
+
+    if [[ "$is_conf" == "1" ]]; then
+        # Restore config
+        log_info "Khoi phuc config..."
+        tar -xzf "$backup_file" -C "$NGINX_CONF/sites-available" 2>/dev/null
+        log_info "Config da khoi phuc thanh cong"
+        return 0
+    fi
+
+    # Restore full domain
+    if [[ -d "$WWW_DIR/$domain" ]]; then
+        log_warn "Domain '$domain' da ton tai"
+        printf "Nhap 'yes' de ghi de: "
+        read -r confirm
+        if [[ "$confirm" != "yes" ]]; then
+            echo "Da huy."
+            return 1
+        fi
+        rm -rf "$WWW_DIR/$domain"
+    fi
+
+    # Extract
+    log_info "Giai nen backup..."
+    tar -xzf "$backup_file" -C "$WWW_DIR" 2>/dev/null
+
+    if [[ -d "$WWW_DIR/$domain" ]]; then
+        log_info "Khoi phuc thanh cong!"
+        echo ""
+        echo "  Domain: $domain"
+        echo "  Root: $WWW_DIR/$domain/public_html"
+
+        # Auto enable
+        local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+        if [[ -f "$conf_file" ]]; then
+            if [[ ! -L "$NGINX_CONF/sites-enabled/$domain.conf" ]]; then
+                ln -sf "$conf_file" "$NGINX_CONF/sites-enabled/$domain.conf"
+                log_info "Da enable domain"
+            fi
+
+            # Reload nginx
+            /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null && \
+                /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
+        fi
+    else
+        log_error "Khoi phuc that bai"
+        return 1
+    fi
+
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# MAIN
+#------------------------------------------------------------------------------
+
+main() {
+    check_root
+
+    if [[ $# -eq 0 ]]; then
+        usage
+    fi
+
+    local backup_file=""
+
+    for arg in "$@"; do
+        case "$arg" in
+            --list)
+                list_backups
+                exit 0
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                backup_file="$arg"
+                ;;
+        esac
+    done
+
+    restore_domain "$backup_file"
+}
+
+main "$@"
