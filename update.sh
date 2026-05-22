@@ -59,7 +59,7 @@ update_bin_scripts() {
         log_warn "Không tìm thấy $SCRIPT_DIR/bin"
     fi
 
-    local bin_links="v-check-vps v-list-domain v-add-domain v-change-domain v-delete-domain"
+    local bin_links="v-check-vps v-list-domain v-add-domain v-delete-domain v-add-ssl v-backup-domain v-restore-domain v-rebuild-domain"
     for bin in $bin_links; do
         if [[ -f "$SPANEL_DIR/bin/$bin" ]]; then
             ln -sf "$SPANEL_DIR/bin/$bin" "/usr/local/bin/$bin"
@@ -120,13 +120,18 @@ reload_services() {
     if [[ -f "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
         if pgrep -x nginx > /dev/null 2>&1; then
             if "$OPENRESTY_DIR/nginx/sbin/nginx" -t 2>/dev/null; then
-                "$OPENRESTY_DIR/nginx/sbin/nginx" -s reload
-                log_info "Đã reload nginx"
+                # Kill and restart nginx instead of reload
+                pkill nginx 2>/dev/null || true
+                sleep 1
+                "$OPENRESTY_DIR/nginx/sbin/nginx" -c "$SPANEL_DIR/nginx/conf/nginx.conf"
+                log_info "Đã restart nginx"
             else
                 log_warn "Nginx config lỗi, bỏ qua reload"
             fi
         else
-            log_warn "Nginx không chạy, bỏ qua reload"
+            # Start nginx if not running
+            "$OPENRESTY_DIR/nginx/sbin/nginx" -c "$SPANEL_DIR/nginx/conf/nginx.conf"
+            log_info "Đã start nginx"
         fi
     else
         log_warn "Nginx chưa cài đặt"

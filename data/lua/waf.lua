@@ -110,14 +110,14 @@ local function pattern_match(str, pattern)
             "execute%s*%(",
             "benchmark%s*%(",
             "sleep%s*%(",
-            "'\s*or\s*'1'\s*=\s*'1",
-            "'\s*or\s*1\s*=\s*1",
-            "\"\\s*or\\s*1\\s*=\\s*1",
-            "or\s+1\s*=\s*1",
-            "'\s*--",
-            ";\s*drop\s+",
-            ";\s*delete\s+",
-            "'\s*;\s*"
+            "'%s*or%s*'1'%s*=%s*'1",
+            "'%s*or%s*1%s*=%s*1",
+            "'%s*or%s*1%s*=%s*1",
+            "or%s+1%s*=%s*1",
+            "'%s*--",
+            ";%s*drop%s+",
+            ";%s*delete%s+",
+            "'%s*;%s*"
         }
 
         for _, p in ipairs(sql_patterns) do
@@ -153,18 +153,17 @@ local function pattern_match(str, pattern)
     -- LFI patterns
     if pattern:match("^lfi:") then
         local lfi_patterns = {
-            "%./%./",
+            "../",
             "/etc/passwd",
             "/etc/shadow",
             "/proc/self",
             "/proc/environ",
-            "..%/",
-            "%c0%c0",
+            "..%2f",
             "%252e%252e"
         }
 
         for _, p in ipairs(lfi_patterns) do
-            if str:lower():match(p) then
+            if str:lower():find(p, 1, true) then
                 return true, "LFI Pattern"
             end
         end
