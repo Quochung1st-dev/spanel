@@ -104,10 +104,16 @@ install_openresty() {
         openresty-zlib
 
     # Cài OpenResty version cụ thể nếu có thể
-    if apt-cache show "openresty=${OPENRESTY_VERSION}-1~" 2>/dev/null | grep -q "Version"; then
-        apt-get install -y "openresty=${OPENRESTY_VERSION}-1~noble1" || \
+    # Lấy version mới nhất available có cùng base version
+    local base_version=$(echo "$OPENRESTY_VERSION" | cut -d. -f1-3)
+    local available_version=$(apt-cache policy openresty 2>/dev/null | grep "${base_version}" | head -1 | awk '{print $2}' | sed 's/-1~noble1//')
+
+    if [[ -n "$available_version" ]]; then
+        log_info "Cài OpenResty $available_version..."
+        apt-get install -y "openresty=${available_version}-1~noble1" || \
             apt-get install -y openresty
     else
+        log_warn "Không tìm thấy version $base_version, cài mặc định..."
         apt-get install -y openresty
     fi
 
@@ -191,10 +197,11 @@ main() {
     if check_openresty_installed; then
         # Kiểm tra Lua module
         if check_lua_module; then
-            # Kiểm tra version
-            local installed_version=$("$OPENRESTY_DIR/nginx/sbin/nginx" -v 2>&1 | grep -oP '\d+\.\d+\.\d+')
-            if [[ "$installed_version" == "$OPENRESTY_VERSION" ]]; then
-                log_info "OK - OpenResty $OPENRESTY_VERSION đã được cài"
+            # Kiểm tra version (so sánh base version)
+            local installed_base=$(echo "$installed_version" | cut -d. -f1-2)
+            local expected_base=$(echo "$OPENRESTY_VERSION" | cut -d. -f1-2)
+            if [[ "$installed_base" == "$expected_base" ]]; then
+                log_info "OK - OpenResty $installed_version (base: $expected_base.x)"
             else
                 log_warn "Version không khớp: $installed_version != $OPENRESTY_VERSION"
                 uninstall_openresty
