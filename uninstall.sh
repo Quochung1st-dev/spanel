@@ -2,6 +2,9 @@
 #==============================================================================
 # SPanel Uninstaller
 # Gỡ cài đặt SPanel và tất cả components
+#
+# Usage: bash uninstall.sh [--clear]
+#   --clear    Xóa luôn /var/www (dữ liệu website)
 #==============================================================================
 
 set -e
@@ -22,6 +25,21 @@ fi
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 SPANEL_USER="${SPANEL_USER:-spanel}"
 SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
+
+# Parse arguments
+CLEAR_DATA=false
+for arg in "$@"; do
+    case $arg in
+        --clear)
+            CLEAR_DATA=true
+            ;;
+        --help|-h)
+            echo "Usage: bash uninstall.sh [--clear]"
+            echo "  --clear    Xóa luôn /var/www (dữ liệu website)"
+            exit 0
+            ;;
+    esac
+done
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
@@ -50,7 +68,12 @@ confirm_uninstall() {
     echo "  - User và group spanel"
     echo "  - Thư mục $SPANEL_DIR"
     echo ""
-    echo -e "${YELLOW}Lưu ý: Dữ liệu website tại /var/www sẽ không bị xóa${NC}"
+
+    if [[ "$CLEAR_DATA" == "true" ]]; then
+        echo -e "${RED}  -- CÓ: Xóa luôn /var/www${NC}"
+    else
+        echo -e "${YELLOW}  -- KHÔNG xóa /var/www (thêm --clear để xóa)${NC}"
+    fi
     echo ""
 
     read -p "Chắc chắn muốn gỡ cài đặt? (yes/no): " -r
@@ -86,7 +109,7 @@ main() {
     bash "$SCRIPT_DIR/uninstall/ssl.sh"
 
     log_section "Gỡ Domains"
-    bash "$SCRIPT_DIR/uninstall/domain.sh"
+    bash "$SCRIPT_DIR/uninstall/domain.sh" "$CLEAR_DATA"
 
     log_section "Gỡ User & Group"
     bash "$SCRIPT_DIR/uninstall/user.sh"
@@ -99,8 +122,13 @@ main() {
     echo -e "${GREEN}ĐÃ GỠ CÀI ĐẶT SPANEL${NC}"
     echo "========================================"
     echo ""
-    echo "Thư mục /var/www vẫn còn với dữ liệu website."
-    echo "Xóa thủ công nếu cần: rm -rf /var/www"
+
+    if [[ "$CLEAR_DATA" == "true" ]]; then
+        echo "Đã xóa /var/www"
+    else
+        echo "Thư mục /var/www vẫn còn với dữ liệu website."
+        echo "Xóa thủ công nếu cần: rm -rf /var/www"
+    fi
     echo ""
 }
 

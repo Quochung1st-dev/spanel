@@ -2,6 +2,8 @@
 #==============================================================================
 # Uninstall Domains
 # Gỡ domain configs
+# Usage: bash domain.sh [true|false]
+#   true = xóa luôn /var/www, false = giữ lại (mặc định)
 #==============================================================================
 
 RED='\033[0;31m'
@@ -14,6 +16,8 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 SPANEL_DIR="/var/server"
 WWW_DIR="/var/www"
+
+CLEAR_DATA="${1:-false}"
 
 main() {
     log_info "Gỡ domain configs..."
@@ -35,8 +39,16 @@ main() {
         log_info "Đã xóa conf.d"
     fi
 
+    # Xóa /var/www nếu có --clear
+    if [[ "$CLEAR_DATA" == "true" ]] && [[ -d "$WWW_DIR" ]]; then
+        log_warn "Xóa $WWW_DIR..."
+        rm -rf "$WWW_DIR"
+        log_info "Đã xóa $WWW_DIR"
+    else
+        log_info "Giữ lại $WWW_DIR (thêm --clear để xóa)"
+    fi
+
     log_info "Hoàn tất gỡ domain configs"
-    log_warn "Dữ liệu website tại $WWW_DIR vẫn còn - xóa thủ công nếu cần"
 }
 
 main "$@"
