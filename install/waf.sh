@@ -1,7 +1,8 @@
 #!/bin/bash
 #==============================================================================
 # WAF Installer
-# Cài đặt Web Application Firewall rules và module
+# Cài đặt Web Application Firewall rules dựa trên Lua
+# Không cài ModSecurity - chỉ dùng Lua WAF thuần
 #==============================================================================
 
 set -e
@@ -25,8 +26,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Cài đặt WAF rules
 #------------------------------------------------------------------------------
 
-install_waf_rules() {
-    log_info "Cài đặt WAF rules..."
+main() {
+    log_info "Bắt đầu cài đặt WAF..."
+
+    log_info "WAF dựa trên Lua (không dùng ModSecurity)..."
 
     local waf_dir="$SPANEL_DIR/waf"
     mkdir -p $waf_dir/rules
@@ -42,33 +45,6 @@ install_waf_rules() {
     chmod 755 $waf_dir/logs
 
     log_info "Đã cài đặt WAF rules vào $waf_dir"
-}
-
-#------------------------------------------------------------------------------
-# Cài đặt ModSecurity (nếu cần)
-#------------------------------------------------------------------------------
-
-install_modsecurity() {
-    log_info "Kiểm tra ModSecurity..."
-
-    if command -v modsecurity &> /dev/null; then
-        log_info "ModSecurity đã được cài đặt"
-    else
-        log_warn "ModSecurity không được cài đặt (tùy chọn)"
-        log_info "SPanel sử dụng WAF dựa trên Lua thuần"
-    fi
-}
-
-#------------------------------------------------------------------------------
-# MAIN
-#------------------------------------------------------------------------------
-
-main() {
-    log_info "Bắt đầu cài đặt WAF..."
-
-    install_waf_rules
-    install_modsecurity
-
     log_info "Hoàn tất cài đặt WAF"
 }
 
