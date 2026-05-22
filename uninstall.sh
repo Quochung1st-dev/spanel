@@ -61,10 +61,9 @@ confirm_uninstall() {
     echo ""
     echo "Script này sẽ gỡ:"
     echo "  - OpenResty/Nginx"
-    echo "  - LuaJIT"
+    echo "  - Lua scripts"
     echo "  - WAF"
     echo "  - SSL certificates"
-    echo "  - Domain configs"
     echo "  - User và group spanel"
     echo "  - Thư mục $SPANEL_DIR"
     echo ""
@@ -95,27 +94,30 @@ main() {
 
     confirm_uninstall
 
-    # Chạy lần lượt các script gỡ
-    log_section "Gỡ OpenResty"
-    bash "$SCRIPT_DIR/uninstall/openresty.sh"
-
-    log_section "Gỡ LuaJIT"
-    bash "$SCRIPT_DIR/uninstall/lua.sh"
+    # Chạy lần lượt các script gỡ (theo thứ tự ngược lại với install)
+    # 1. SSL trước (cần remove configs)
+    # 2. WAF
+    # 3. User & Group (cần xóa user trước khi xóa dir)
+    # 4. Lua scripts
+    # 5. Directory (xóa /var/www nếu có --clear)
+    # 6. OpenResty cuối (cần stop nginx trước)
+    log_section "Gỡ SSL"
+    bash "$SCRIPT_DIR/uninstall/ssl.sh"
 
     log_section "Gỡ WAF"
     bash "$SCRIPT_DIR/uninstall/waf.sh"
 
-    log_section "Gỡ SSL"
-    bash "$SCRIPT_DIR/uninstall/ssl.sh"
-
-    log_section "Gỡ Domains"
-    bash "$SCRIPT_DIR/uninstall/domain.sh" "$CLEAR_DATA"
-
     log_section "Gỡ User & Group"
     bash "$SCRIPT_DIR/uninstall/user.sh"
 
+    log_section "Gỡ Lua scripts"
+    bash "$SCRIPT_DIR/uninstall/lua.sh"
+
     log_section "Gỡ thư mục SPanel"
-    bash "$SCRIPT_DIR/uninstall/dir.sh"
+    bash "$SCRIPT_DIR/uninstall/dir.sh" "$CLEAR_DATA"
+
+    log_section "Gỡ OpenResty"
+    bash "$SCRIPT_DIR/uninstall/openresty.sh"
 
     echo ""
     echo "========================================"

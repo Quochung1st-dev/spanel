@@ -1,7 +1,8 @@
 #!/bin/bash
 #==============================================================================
-# Uninstall LuaJIT
-# Gỡ cài đặt LuaJIT
+# Uninstall Lua
+# Gỡ Lua scripts trong SPanel
+# Note: LuaJIT đã được cài đặt cùng OpenResty, không cần gỡ riêng
 #==============================================================================
 
 RED='\033[0;31m'
@@ -15,21 +16,17 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 SPANEL_DIR="/var/server"
 
 main() {
-    log_info "Gỡ LuaJIT..."
+    log_info "Gỡ Lua scripts..."
 
-    # Xóa LuaJIT trong SPanel directory
-    if [[ -d "$SPANEL_DIR/luajit" ]]; then
-        rm -rf "$SPANEL_DIR/luajit"
-        log_info "Đã xóa $SPANEL_DIR/luajit"
-    fi
-
-    # Xóa Lua source nếu có
+    # Xóa Lua scripts trong SPanel directory
     if [[ -d "$SPANEL_DIR/lua" ]]; then
         rm -rf "$SPANEL_DIR/lua"
         log_info "Đã xóa $SPANEL_DIR/lua"
     fi
 
-    log_info "Hoàn tất gỡ LuaJIT"
+    # LuaJIT đã được gỡ cùng OpenResty - không cần xử lý thêm
+
+    log_info "Hoàn tất gỡ Lua"
 }
 
 main "$@"
