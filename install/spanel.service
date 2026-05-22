@@ -5,12 +5,12 @@ After=network.target
 [Service]
 Type=forking
 PIDFile=/var/server/run/nginx.pid
-ExecStart=/var/server/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf
-ExecReload=/var/server/nginx/sbin/nginx -s reload
-ExecStop=/var/server/nginx/sbin/nginx -s stop
+ExecStart=/usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf
+ExecReload=/usr/local/openresty/nginx/sbin/nginx -s reload
+ExecStop=/usr/local/openresty/nginx/sbin/nginx -s stop
 User=root
 Group=www-data
-WorkingDirectory=/opt/spanel
+WorkingDirectory=/var/server
 
 RuntimeDirectory=spanel
 LogsDirectory=spanel
