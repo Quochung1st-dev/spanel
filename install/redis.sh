@@ -93,7 +93,7 @@ dir /var/lib/redis
 
 # Logging
 loglevel notice
-logfile /var/log/redis/redis-server.log
+logfile /var/server/logs/redis/redis.log
 
 # Memory
 maxmemory 1gb

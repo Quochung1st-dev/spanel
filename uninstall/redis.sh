@@ -29,7 +29,6 @@ main() {
     rm -rf "$SPANEL_DIR/redis" 2>/dev/null || true
 
     # Xóa logs
-    rm -rf /var/log/redis 2>/dev/null || true
     rm -rf "$SPANEL_DIR/logs/redis" 2>/dev/null || true
 
     # Xóa config (khôi phục backup nếu có)
