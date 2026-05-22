@@ -113,77 +113,72 @@ create_vhost() {
 server {
     listen 80;
     listen [::]:80;
-    server_name $domain www.$domain;
+    server_name SERVER_DOMAIN SERVER_WWW;
     return 301 https://$host$request_uri;
 }
-
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name $domain www.$domain;
-
-    root $WWW_DIR/$domain/public_html;
+    server_name SERVER_DOMAIN SERVER_WWW;
+    root WWW_DIR/public_html;
     index index.html index.htm index.php;
-
-    access_log $WWW_DIR/$domain/logs/access.log;
-    error_log $WWW_DIR/$domain/logs/error.log;
-
-    ssl_certificate $WWW_DIR/$domain/ssl/fullchain.pem;
-    ssl_certificate_key $WWW_DIR/$domain/ssl/privkey.pem;
-
+    access_log WWW_DIR/logs/access.log;
+    error_log WWW_DIR/logs/error.log;
+    ssl_certificate WWW_DIR/ssl/fullchain.pem;
+    ssl_certificate_key WWW_DIR/ssl/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
     ssl_prefer_server_ciphers off;
-
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-
     location / {
         try_files $uri $uri/ =404;
     }
-
-    location ~ \.php\$ {
+    location ~ \.php$ {
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
-
     location ~ /\. {
         deny all;
     }
 }
 EOF
+
+        # Replace placeholders
+        sed -i "s|SERVER_DOMAIN|$domain|g" "$conf_file"
+        sed -i "s|SERVER_WWW|www.$domain|g" "$conf_file"
+        sed -i "s|WWW_DIR|$WWW_DIR/$domain|g" "$conf_file"
     else
-        cat > "$conf_file" << EOF
+        cat > "$conf_file" << 'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name $domain www.$domain;
-
-    root $WWW_DIR/$domain/public_html;
+    server_name SERVER_DOMAIN SERVER_WWW;
+    root WWW_DIR/public_html;
     index index.html index.htm index.php;
-
-    access_log $WWW_DIR/$domain/logs/access.log;
-    error_log $WWW_DIR/$domain/logs/error.log;
-
+    access_log WWW_DIR/logs/access.log;
+    error_log WWW_DIR/logs/error.log;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-
     location / {
         try_files $uri $uri/ =404;
     }
-
-    location ~ \.php\$ {
+    location ~ \.php$ {
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
-
     location ~ /\. {
         deny all;
     }
 }
 EOF
+
+        # Replace placeholders
+        sed -i "s|SERVER_DOMAIN|$domain|g" "$conf_file"
+        sed -i "s|SERVER_WWW|www.$domain|g" "$conf_file"
+        sed -i "s|WWW_DIR|$WWW_DIR/$domain|g" "$conf_file"
     fi
 
     chmod 644 "$conf_file"
