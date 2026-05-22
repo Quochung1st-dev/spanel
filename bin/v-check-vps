@@ -30,34 +30,6 @@ print_header() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
-print_ok() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-print_warn() {
-    echo -e "${YELLOW}✗${NC} $1"
-}
-
-print_info() {
-    echo -e "${CYAN}•${NC} $1"
-}
-
-check_service_status() {
-    local service=$1
-    local display_name=$2
-
-    if systemctl is-active --quiet $service 2>/dev/null; then
-        echo -e "  ${display_name}: ${GREEN}running${NC}"
-        return 0
-    elif pgrep -x $service > /dev/null 2>&1 || pgrep -f "$service" > /dev/null 2>&1; then
-        echo -e "  ${display_name}: ${YELLOW}running (manual)${NC}"
-        return 0
-    else
-        echo -e "  ${display_name}: ${RED}stopped${NC}"
-        return 1
-    fi
-}
-
 #------------------------------------------------------------------------------
 # Header
 #------------------------------------------------------------------------------
@@ -86,20 +58,11 @@ echo "  Load Avg:    $(cat /proc/loadavg | awk '{print $1, $2, $3}')"
 
 print_header "CPU & Memory"
 
-local cpu_model=$(cat /proc/cpuinfo | grep "model name" | head -1 | cut -d':' -f2 | sed 's/^ //')
-local cpu_cores=$(nproc)
-
-echo "  CPU Model:   ${cpu_model}"
-echo "  CPU Cores:   ${cpu_cores}"
+echo "  CPU Model:   $(cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d':' -f2 | sed 's/^ //')"
+echo "  CPU Cores:   $(nproc)"
 echo ""
-
-local mem_total=$(free -h | awk '/^Mem:/ {print $2}')
-local mem_used=$(free -h | awk '/^Mem:/ {print $3}')
-local mem_free=$(free -h | awk '/^Mem:/ {print $4}')
-local mem_pct=$(free | awk '/^Mem:/ {printf "%.0f", $3/$2 * 100}')
-
-echo "  Memory:      ${mem_used} / ${mem_total} (${mem_pct}%)"
-echo "  Available:   ${mem_free}"
+echo "  Memory:      $(free -h | awk '/^Mem:/ {print $3}') / $(free -h | awk '/^Mem:/ {print $2}') ($(free | awk '/^Mem:/ {printf "%.0f", $3/$2 * 100}'))%"
+echo "  Available:   $(free -h | awk '/^Mem:/ {print $7}')"
 
 #------------------------------------------------------------------------------
 # Disk Usage
@@ -107,19 +70,19 @@ echo "  Available:   ${mem_free}"
 
 print_header "Disk Usage"
 
-df -h | grep -E '^/dev/' | while read line; do
-    local disk=$(echo $line | awk '{print $1}')
-    local size=$(echo $line | awk '{print $2}')
-    local used=$(echo $line | awk '{print $3}')
-    local avail=$(echo $line | awk '{print $4}')
-    local use_pct=$(echo $line | awk '{print $5}' | tr -d '%')
+df -h | grep -E '^/dev/' | while IFS= read -r line; do
+    disk=$(echo "$line" | awk '{print $1}')
+    size=$(echo "$line" | awk '{print $2}')
+    used=$(echo "$line" | awk '{print $3}')
+    avail=$(echo "$line" | awk '{print $4}')
+    use_pct=$(echo "$line" | awk '{print $5}' | tr -d '%')
 
-    local color=$GREEN
-    if [[ $use_pct -gt 80 ]]; then
-        color=$YELLOW
-    fi
     if [[ $use_pct -gt 90 ]]; then
         color=$RED
+    elif [[ $use_pct -gt 80 ]]; then
+        color=$YELLOW
+    else
+        color=$GREEN
     fi
 
     echo -e "  ${disk}"
@@ -132,23 +95,17 @@ done
 
 print_header "Network"
 
-local ip_addr=$(hostname -I | awk '{print $1}')
-local gateway=$(ip route 2>/dev/null | grep default | awk '{print $3}' || echo "N/A")
-local dns=$(grep nameserver /etc/resolv.conf 2>/dev/null | head -1 | awk '{print $2}' || echo "N/A")
-
-echo "  IP Address: ${ip_addr}"
-echo "  Gateway:    ${gateway}"
-echo "  DNS:        ${dns}"
-
-# Check network ports
+echo "  IP Address: $(hostname -I | awk '{print $1}')"
+echo "  Gateway:    $(ip route 2>/dev/null | grep default | awk '{print $3}' || echo 'N/A')"
+echo "  DNS:        $(grep nameserver /etc/resolv.conf 2>/dev/null | head -1 | awk '{print $2}' || echo 'N/A')"
 echo ""
 echo "  Listening Ports:"
-ss -tlnp 2>/dev/null | grep -E '(:80|:443|:22|:8080|:6379)' | while read line; do
-    local port=$(echo $line | grep -oP ':\K[0-9]+' | head -1)
-    local proto=$(echo $line | awk '{print $1}')
-    local state=$(echo $line | awk '{print $2}')
-    echo -e "    ${CYAN}${port}${NC}/${proto} - ${state}"
-done 2>/dev/null || echo "    Không thể kiểm tra ports"
+
+ss -tlnp 2>/dev/null | grep -E '(:80|:443|:22|:8080|:6379)' | while IFS= read -r line; do
+    port=$(echo "$line" | grep -oP ':\K[0-9]+' | head -1)
+    proto=$(echo "$line" | awk '{print $1}')
+    echo -e "    ${CYAN}${port}${NC}/${proto}"
+done 2>/dev/null || echo "    Khong the kiem tra ports"
 
 #------------------------------------------------------------------------------
 # Services Status
@@ -156,28 +113,12 @@ done 2>/dev/null || echo "    Không thể kiểm tra ports"
 
 print_header "Services Status"
 
-local services_ok=0
-local services_total=0
-
-check_service() {
-    local service=$1
-    local display_name=$2
-    services_total=$((services_total + 1))
-
-    if systemctl is-active --quiet $service 2>/dev/null; then
-        echo -e "  ${GREEN}✓${NC} ${display_name}"
-        services_ok=$((services_ok + 1))
-    elif pgrep -x $service > /dev/null 2>&1 || pgrep -f "$service" > /dev/null 2>&1; then
-        echo -e "  ${YELLOW}○${NC} ${display_name} (manual)"
-        services_ok=$((services_ok + 1))
-    else
-        echo -e "  ${RED}✗${NC} ${display_name}"
-    fi
-}
+services_ok=0
+services_total=0
 
 # OpenResty/Nginx
 if [[ -f "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
-    local nginx_ver=$("$OPENRESTY_DIR/nginx/sbin/nginx" -v 2>&1 | grep -oP '\d+\.\d+\.\d+')
+    nginx_ver=$("$OPENRESTY_DIR/nginx/sbin/nginx" -v 2>&1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
     if pgrep -x nginx > /dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} OpenResty/Nginx ${nginx_ver}"
         services_ok=$((services_ok + 1))
@@ -217,7 +158,12 @@ services_total=$((services_total + 1))
 
 # SPanel Service
 if [[ -f /etc/systemd/system/spanel.service ]]; then
-    check_service "spanel" "SPanel Service"
+    if systemctl is-active --quiet spanel 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} SPanel Service"
+        services_ok=$((services_ok + 1))
+    else
+        echo -e "  ${RED}✗${NC} SPanel Service"
+    fi
 else
     echo -e "  ${YELLOW}○${NC} SPanel Service (not installed)"
 fi
@@ -232,30 +178,50 @@ print_header "SPanel"
 if [[ -d "$SPANEL_DIR" ]]; then
     echo -e "  ${GREEN}✓${NC} SPanel installed at ${SPANEL_DIR}"
 
-    # Config
     if [[ -f "$SPANEL_DIR/.env" ]]; then
         echo -e "  ${GREEN}✓${NC} Config: $SPANEL_DIR/.env"
     else
         echo -e "  ${RED}✗${NC} Config: $SPANEL_DIR/.env (missing)"
     fi
 
-    # Version info
     echo "  OpenResty:   ${OPENRESTY_VERSION:-N/A}"
-    echo "  Nginx:      ${NGINX_VERSION:-N/A}"
-
-    # Directories
+    echo "  Nginx:       ${NGINX_VERSION:-N/A}"
     echo ""
     echo "  Directories:"
-    [[ -d "$SPANEL_DIR/nginx" ]] && echo -e "    ${GREEN}✓${NC} nginx" || echo -e "    ${RED}✗${NC} nginx"
-    [[ -d "$SPANEL_DIR/lua" ]] && echo -e "    ${GREEN}✓${NC} lua" || echo -e "    ${RED}✗${NC} lua"
-    [[ -d "$SPANEL_DIR/waf" ]] && echo -e "    ${GREEN}✓${NC} waf" || echo -e "    ${RED}✗${NC} waf"
-    [[ -d "$SPANEL_DIR/ssl" ]] && echo -e "    ${GREEN}✓${NC} ssl" || echo -e "    ${RED}✗${NC} ssl"
-    [[ -d "$SPANEL_DIR/logs" ]] && echo -e "    ${GREEN}✓${NC} logs" || echo -e "    ${RED}✗${NC} logs"
 
-    # Domains count
+    if [[ -d "$SPANEL_DIR/nginx" ]]; then
+        echo -e "    ${GREEN}✓${NC} nginx"
+    else
+        echo -e "    ${RED}✗${NC} nginx"
+    fi
+
+    if [[ -d "$SPANEL_DIR/lua" ]]; then
+        echo -e "    ${GREEN}✓${NC} lua"
+    else
+        echo -e "    ${RED}✗${NC} lua"
+    fi
+
+    if [[ -d "$SPANEL_DIR/waf" ]]; then
+        echo -e "    ${GREEN}✓${NC} waf"
+    else
+        echo -e "    ${RED}✗${NC} waf"
+    fi
+
+    if [[ -d "$SPANEL_DIR/ssl" ]]; then
+        echo -e "    ${GREEN}✓${NC} ssl"
+    else
+        echo -e "    ${RED}✗${NC} ssl"
+    fi
+
+    if [[ -d "$SPANEL_DIR/logs" ]]; then
+        echo -e "    ${GREEN}✓${NC} logs"
+    else
+        echo -e "    ${RED}✗${NC} logs"
+    fi
+
     echo ""
     if [[ -d "$SPANEL_DIR/nginx/sites-enabled" ]]; then
-        local domain_count=$(ls $SPANEL_DIR/nginx/sites-enabled/*.conf 2>/dev/null | wc -l)
+        domain_count=$(ls "$SPANEL_DIR/nginx/sites-enabled"/*.conf 2>/dev/null | wc -l || echo 0)
         echo "  Domains:     ${domain_count}"
     else
         echo "  Domains:     0"
