@@ -1,34 +1,28 @@
 #!/bin/bash
 #==============================================================================
-# SPanel Updater
-# Cập nhật SPanel lên phiên bản mới
+# SPanel Update Script
+# Cập nhật SPanel từ source code
 #==============================================================================
 
 set -e
 
-# Màu sắc cho output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Các biến
-SPANEL_DIR="/opt/spanel"
-BACKUP_DIR="/opt/spanel-backup-$(date +%Y%m%d-%H%M%S)"
-GIT_REMOTE="${GIT_REMOTE:-origin}"
-GIT_BRANCH="${GIT_BRANCH:-main}"
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+#------------------------------------------------------------------------------
+# Kiểm tra quyền root
+#------------------------------------------------------------------------------
 
 check_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -37,210 +31,150 @@ check_root() {
     fi
 }
 
-#-------------------------------------------------------------------------------
-# Backup trước khi update
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Kiểm tra SPanel đã cài chưa
+#------------------------------------------------------------------------------
 
-backup_before_update() {
-    log_info "Tạo backup trước khi cập nhật..."
-
-    mkdir -p $BACKUP_DIR
-
-    # Backup các file quan trọng
-    [[ -f $SPANEL_DIR/.env ]] && cp $SPANEL_DIR/.env $BACKUP_DIR/
-    [[ -f $SPANEL_DIR/var/server/nginx/nginx.conf ]] && cp -r $SPANEL_DIR/var/server/nginx $BACKUP_DIR/
-    [[ -d $SPANEL_DIR/var/www ]] && cp -r $SPANEL_DIR/var/www $BACKUP_DIR/
-    [[ -d $SPANEL_DIR/logs ]] && cp -r $SPANEL_DIR/logs $BACKUP_DIR/
-    [[ -d $SPANEL_DIR/var/server/waf ]] && cp -r $SPANEL_DIR/var/server/waf $BACKUP_DIR/
-
-    log_info "Backup đã được lưu tại: $BACKUP_DIR"
-}
-
-#-------------------------------------------------------------------------------
-# Kiểm tra phiên bản hiện tại
-#-------------------------------------------------------------------------------
-
-check_current_version() {
-    if [[ -f $SPANEL_DIR/.env ]]; then
-        source $SPANEL_DIR/.env
-        log_info "Phiên bản hiện tại: ${SPANEL_VERSION:-unknown}"
-    fi
-}
-
-#-------------------------------------------------------------------------------
-# Pull code mới từ Git
-#-------------------------------------------------------------------------------
-
-pull_latest_code() {
-    log_info "Đang tải phiên bản mới..."
-
-    if [[ -d .git ]]; then
-        git fetch $GIT_REMOTE
-        git checkout $GIT_BRANCH
-        git pull $GIT_REMOTE $GIT_BRANCH
-        log_info "Đã cập nhật code từ Git"
-    else
-        log_error "Không tìm thấy .git repository"
+check_spanel_installed() {
+    if [[ ! -d "$SPANEL_DIR" ]]; then
+        log_error "SPanel chưa được cài đặt tại $SPANEL_DIR"
+        log_info "Chạy install.sh để cài đặt"
         exit 1
     fi
 }
 
-#-------------------------------------------------------------------------------
-# Cập nhật cấu hình Nginx
-#-------------------------------------------------------------------------------
-
-update_nginx_config() {
-    log_info "Cập nhật cấu hình Nginx..."
-
-    # Chỉ update config mới, không ghi đè config tùy chỉnh
-    [[ -f install/nginx/nginx.conf ]] && cp install/nginx/nginx.conf $SPANEL_DIR/var/server/nginx/nginx.conf
-
-    # Update các block config trong conf.d
-    [[ -d install/nginx/conf.d ]] && cp -r install/nginx/conf.d/* $SPANEL_DIR/var/server/nginx/conf.d/ 2>/dev/null || true
-
-    log_info "Đã cập nhật cấu hình Nginx"
-}
-
-#-------------------------------------------------------------------------------
-# Cập nhật Lua scripts
-#-------------------------------------------------------------------------------
-
-update_lua_scripts() {
-    log_info "Cập nhật Lua scripts..."
-
-    [[ -d install/lua ]] && cp -r install/lua/* $SPANEL_DIR/var/server/lua/
-
-    log_info "Đã cập nhật Lua scripts"
-}
-
-#-------------------------------------------------------------------------------
-# Cập nhật WAF rules
-#-------------------------------------------------------------------------------
-
-update_waf_rules() {
-    log_info "Cập nhật WAF rules..."
-
-    [[ -d install/waf ]] && cp -r install/waf/* $SPANEL_DIR/var/server/waf/
-
-    log_info "Đã cập nhật WAF rules"
-}
-
-#-------------------------------------------------------------------------------
-# Cập nhật binary scripts
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Update bin scripts
+#------------------------------------------------------------------------------
 
 update_bin_scripts() {
-    log_info "Cập nhật binary scripts..."
+    log_info "Cập nhật bin scripts..."
 
-    [[ -d install/bin ]] && cp -r install/bin/* $SPANEL_DIR/bin/
-
-    # Cập nhật symlinks
-    for script in $SPANEL_DIR/bin/*; do
-        local name=$(basename $script)
-        ln -sf $script /usr/local/bin/spanel-$name 2>/dev/null || true
-    done
-
-    chmod +x $SPANEL_DIR/bin/*
-
-    log_info "Đã cập nhật binary scripts"
-}
-
-#-------------------------------------------------------------------------------
-# Cập nhật systemd service
-#-------------------------------------------------------------------------------
-
-update_systemd_service() {
-    log_info "Cập nhật systemd service..."
-
-    [[ -f install/spanel.service ]] && cp install/spanel.service /etc/systemd/system/
-    systemctl daemon-reload
-
-    log_info "Đã cập nhật systemd service"
-}
-
-#-------------------------------------------------------------------------------
-# Chạy migration scripts
-#-------------------------------------------------------------------------------
-
-run_migrations() {
-    log_info "Chạy migration scripts..."
-
-    if [[ -d install/migrations ]]; then
-        for migration in install/migrations/*.sh; do
-            if [[ -f $migration ]]; then
-                log_info "Chạy: $(basename $migration)"
-                bash $migration
-            fi
-        done
-    fi
-
-    log_info "Đã chạy migrations"
-}
-
-#-------------------------------------------------------------------------------
-# Kiểm tra cấu hình
-#-------------------------------------------------------------------------------
-
-validate_config() {
-    log_info "Kiểm tra cấu hình..."
-
-    if nginx -t 2>/dev/null; then
-        log_info "Cấu hình Nginx hợp lệ"
+    # Copy bin scripts
+    if [[ -d "$SCRIPT_DIR/bin" ]]; then
+        mkdir -p "$SPANEL_DIR/bin"
+        cp -rf "$SCRIPT_DIR/bin/"* "$SPANEL_DIR/bin/"
+        chmod +x "$SPANEL_DIR/bin/"v-* 2>/dev/null || true
+        log_info "Đã cập nhật bin scripts"
     else
-        log_warn "Cấu hình Nginx có lỗi"
+        log_warn "Không tìm thấy $SCRIPT_DIR/bin"
+    fi
+
+    # Update symlinks
+    local bin_links=(
+        "v-check-vps"
+        "v-manager-domain"
+        "v-add-domain"
+        "v-change-domain"
+        "v-delete-domain"
+    )
+
+    for bin in "${bin_links[@]}"; do
+        if [[ -f "$SPANEL_DIR/bin/$bin" ]]; then
+            ln -sf "$SPANEL_DIR/bin/$bin" "/usr/local/bin/$bin"
+        fi
+    done
+    log_info "Đã cập nhật symlinks"
+}
+
+#------------------------------------------------------------------------------
+# Update data (nginx config, lua, waf)
+#------------------------------------------------------------------------------
+
+update_data() {
+    log_info "Cập nhật data..."
+
+    # Nginx configs
+    if [[ -d "$SCRIPT_DIR/data/nginx" ]]; then
+        mkdir -p "$SPANEL_DIR/nginx/conf"
+        cp -rf "$SCRIPT_DIR/data/nginx/"* "$SPANEL_DIR/nginx/conf/"
+        log_info "Đã cập nhật nginx configs"
+    fi
+
+    # Lua scripts
+    if [[ -d "$SCRIPT_DIR/data/lua" ]]; then
+        mkdir -p "$SPANEL_DIR/lua"
+        cp -rf "$SCRIPT_DIR/data/lua/"* "$SPANEL_DIR/lua/"
+        log_info "Đã cập nhật lua scripts"
+    fi
+
+    # WAF rules
+    if [[ -d "$SCRIPT_DIR/data/waf" ]]; then
+        mkdir -p "$SPANEL_DIR/waf"
+        cp -rf "$SCRIPT_DIR/data/waf/"* "$SPANEL_DIR/waf/"
+        log_info "Đã cập nhật waf rules"
+    fi
+
+    # Copy .env nếu cần
+    if [[ -f "$SCRIPT_DIR/.env" ]] && [[ ! -f "$SPANEL_DIR/.env" ]]; then
+        cp "$SCRIPT_DIR/.env" "$SPANEL_DIR/.env"
+        chmod 600 "$SPANEL_DIR/.env"
+        log_info "Đã copy .env"
     fi
 }
 
-#-------------------------------------------------------------------------------
-# Restart services
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Reload services
+#------------------------------------------------------------------------------
 
-restart_services() {
-    log_info "Khởi động lại services..."
+reload_services() {
+    log_info "Reload services..."
 
-    systemctl restart span el
+    # Reload nginx
+    if [[ -f "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
+        if pgrep -x nginx > /dev/null 2>&1; then
+            "$OPENRESTY_DIR/nginx/sbin/nginx" -s reload 2>/dev/null || \
+                ("$OPENRESTY_DIR/nginx/sbin/nginx" -t && "$OPENRESTY_DIR/nginx/sbin/nginx" -s reload")
+            log_info "Đã reload nginx"
+        else
+            log_warn "Nginx không chạy, bỏ qua reload"
+        fi
+    else
+        log_warn "Nginx chưa cài đặt"
+    fi
 
-    log_info "Đã khởi động lại services"
+    # Restart CrowdSec
+    if systemctl is-active --quiet crowdsec 2>/dev/null; then
+        systemctl restart crowdsec
+        log_info "Đã restart crowdsec"
+    fi
+
+    # Restart SPanel service
+    if [[ -f /etc/systemd/system/spanel.service ]]; then
+        systemctl restart spanel 2>/dev/null || true
+        log_info "Đã restart spanel service"
+    fi
 }
 
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # MAIN
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 main() {
-    log_info "Bắt đầu cập nhật SPanel..."
+    echo ""
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}  SPanel Update${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo ""
+
+    log_info "Source: $SCRIPT_DIR"
+    log_info "Target: $SPANEL_DIR"
+    echo ""
 
     check_root
-    check_current_version
-    backup_before_update
-    pull_latest_code
-    update_nginx_config
-    update_lua_scripts
-    update_waf_rules
+    check_spanel_installed
+
     update_bin_scripts
-    update_systemd_service
-    run_migrations
-    validate_config
+    echo ""
+    update_data
+    echo ""
+    reload_services
 
     echo ""
     echo "========================================"
-    echo -e "${GREEN}SPanel đã được cập nhật thành công!${NC}"
+    echo -e "${GREEN}ĐÃ CẬP NHẬT SPANEL${NC}"
     echo "========================================"
     echo ""
-    echo "Thông tin:"
-    echo "  Backup: $BACKUP_DIR"
-    echo "  Phiên bản mới: $GIT_BRANCH"
-    echo ""
-    echo "Hành động:"
-    echo "  1. Kiểm tra thay đổi: diff -r $BACKUP_DIR $SPANEL_DIR"
-    echo "  2. Khởi động lại service: systemctl restart span el"
-    echo ""
-
-    read -p "Khởi động lại services ngay? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        restart_services
-    fi
 }
 
 main "$@"
