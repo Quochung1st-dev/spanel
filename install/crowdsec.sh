@@ -30,14 +30,10 @@ OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 #------------------------------------------------------------------------------
 
 check_crowdsec_installed() {
-    log_info "Kiểm tra CrowdSec..."
-
     if command -v cscli &>/dev/null; then
-        local version=$(cscli version 2>/dev/null | head -1)
-        log_info "CrowdSec đã được cài: $version"
+        log_info "CrowdSec package: $(cscli version 2>/dev/null | head -1)"
         return 0
     else
-        log_warn "CrowdSec chưa được cài đặt"
         return 1
     fi
 }
@@ -48,14 +44,7 @@ check_crowdsec_installed() {
 
 add_crowdsec_repo() {
     log_info "Thêm CrowdSec repo..."
-
-    if command -v curl &>/dev/null; then
-        curl -s https://packagecloud.io/install/repositories/crowdsec/crowdsec/script.deb.sh | bash
-    else
-        log_error "curl không có sẵn"
-        return 1
-    fi
-
+    curl -s https://packagecloud.io/install/repositories/crowdsec/crowdsec/script.deb.sh | bash
     log_info "Đã thêm CrowdSec repo"
 }
 
@@ -71,46 +60,77 @@ install_crowdsec() {
         add_crowdsec_repo
     fi
 
-    # Cài CrowdSec
     apt-get update
-    apt-get install -y crowdsec crowdsec-nginx-bouncer
+    apt-get install -y crowdsec
 
-    # Cài Nginx bouncer cho OpenResty
-    apt-get install -y crowdsec-lapi-bouncer || log_warn "Không cài được crowdsec-lapi-bouncer"
+    # Tạo config nếu chưa có (trong trường hợp package script lỗi)
+    if [[ ! -f /etc/crowdsec/config.yaml ]]; then
+        log_info "Tạo CrowdSec config..."
+        mkdir -p /etc/crowdsec
+
+        # Dump default config
+        /usr/bin/crowdsec -c /etc/crowdsec/config.yaml -t 2>/dev/null || \
+            /usr/bin/cscli config generate --force 2>/dev/null || true
+    fi
+
+    # Backup config nếu có
+    if [[ -f /etc/crowdsec/config.yaml ]]; then
+        cp /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.bak 2>/dev/null || true
+    fi
 
     log_info "Đã cài CrowdSec"
 }
 
 #------------------------------------------------------------------------------
-# Cấu hình CrowdSec cho OpenResty
+# Cấu hình CrowdSec
 #------------------------------------------------------------------------------
 
 configure_crowdsec() {
-    log_info "Cấu hình CrowdSec cho OpenResty..."
-
-    # Kiểm tra config tồn tại
-    if [[ ! -f /etc/crowdsec/config.yaml ]]; then
-        log_warn "CrowdSec config không tồn tại - bỏ qua cấu hình"
-        return 0
-    fi
+    log_info "Cấu hình CrowdSec..."
 
     # Tạo thư mục config
     mkdir -p "$SPANEL_DIR/crowdsec"
 
-    # Copy config nếu có
-    if [[ -d "$SCRIPT_DIR/data/crowdsec" ]]; then
-        cp -r "$SCRIPT_DIR/data/crowdsec/"* "$SPANEL_DIR/crowdsec/"
-        log_info "Đã copy CrowdSec config"
-    fi
+    # Install scenarios
+    cscli collections install crowdsecurity/nginx 2>/dev/null || true
+    cscli collections install crowdsecurity/http-crawl 2>/dev/null || true
 
-    # Register Nginx scenario (bỏ qua lỗi nếu có)
-    cscli collections install crowdsecurity/nginx 2>/dev/null || log_warn "Không cài được crowdsecurity/nginx"
-    cscli scenarios install crowdsecurity/http-crawl 2>/dev/null || log_warn "Không cài được http-crawl"
+    # Ensure config is valid
+    /usr/bin/crowdsec -c /etc/crowdsec/config.yaml -t 2>/dev/null || {
+        log_warn "CrowdSec config lỗi - sửa..."
+        cat > /etc/crowdsec/config.yaml << 'EOFCONFIG'
+common:
+  daemonize: false
+  log_media: stdout
+  log_level: info
+  online_client: false
 
-    # Update GeoIP database
-    cscli collections install crowdsecurity/geoip-database 2>/dev/null || log_warn "Không cài được geoip-database"
+local_api_credentials:
+  url: http://127.0.0.1:8080
+  login: admin
+  password: changeme
 
-    # Restart CrowdSec
+api:
+  server:
+    listen_uri: 127.0.0.1:8080
+    profiles_path: /etc/crowdsec/profiles.yaml
+    console_path: /etc/crowdsec/console.yaml
+    online_client: false
+
+prometheus:
+  enabled: true
+  level: full
+  listen_uri: 127.0.0.1:6060
+
+log_level: info
+log_media: stdout
+EOFCONFIG
+        touch /etc/crowdsec/profiles.yaml
+        touch /etc/crowdsec/console.yaml
+    }
+
+    # Start service
+    systemctl enable crowdsec 2>/dev/null || true
     systemctl restart crowdsec 2>/dev/null || true
 
     log_info "Đã cấu hình CrowdSec"
@@ -121,7 +141,7 @@ configure_crowdsec() {
 #------------------------------------------------------------------------------
 
 main() {
-    log_info "Bắt đầu cài đặt CrowdSec..."
+    log_info "Bat dau cai dat CrowdSec..."
 
     if ! check_crowdsec_installed; then
         install_crowdsec
@@ -130,12 +150,10 @@ main() {
     configure_crowdsec
 
     echo ""
-    log_info "========================================"
-    log_info "CrowdSec đã được cài đặt!"
-    log_info "========================================"
-    log_info "Xem trạng thái: systemctl status crowdsec"
-    log_info "Xem ban list: cscli ban list"
-    log_info "Dashboard: cscli dashboard setup"
+    echo "========================================"
+    echo -e "${GREEN}CrowdSec da duoc cai dat!${NC}"
+    echo "========================================"
+    echo "Trang thai: systemctl status crowdsec"
 }
 
 main "$@"
