@@ -194,25 +194,34 @@ main() {
     log_info "OpenResty dir: $OPENRESTY_DIR"
 
     # Kiểm tra đã cài chưa
-    if check_openresty_installed; then
-        # Kiểm tra Lua module
-        if check_lua_module; then
-            # Kiểm tra version (so sánh base version)
-            local installed_base=$(echo "$installed_version" | cut -d. -f1-2)
-            local expected_base=$(echo "$OPENRESTY_VERSION" | cut -d. -f1-2)
-            if [[ "$installed_base" == "$expected_base" ]]; then
-                log_info "OK - OpenResty $installed_version (base: $expected_base.x)"
+    local installed_version=""
+    if [[ -f "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
+        installed_version=$("$OPENRESTY_DIR/nginx/sbin/nginx" -v 2>&1 | grep -oP '\d+\.\d+\.\d+' || echo "")
+
+        if [[ -n "$installed_version" ]]; then
+            log_info "OpenResty đã cài: $installed_version"
+
+            # Kiểm tra Lua module
+            if check_lua_module; then
+                # So sánh base version (major.minor)
+                local installed_base=$(echo "$installed_version" | cut -d. -f1-2)
+                local expected_base=$(echo "$OPENRESTY_VERSION" | cut -d. -f1-2)
+                if [[ "$installed_base" == "$expected_base" ]]; then
+                    log_info "OK - OpenResty $installed_version (base: $expected_base.x)"
+                    return 0
+                else
+                    log_warn "Version không khớp: $installed_version != $OPENRESTY_VERSION"
+                    uninstall_openresty
+                    install_openresty
+                fi
             else
-                log_warn "Version không khớp: $installed_version != $OPENRESTY_VERSION"
+                log_warn "OpenResty không có Lua - cài lại"
                 uninstall_openresty
                 install_openresty
             fi
-        else
-            log_warn "OpenResty không có Lua - cài lại"
-            uninstall_openresty
-            install_openresty
         fi
     else
+        log_warn "OpenResty chưa được cài đặt"
         install_openresty
     fi
 
