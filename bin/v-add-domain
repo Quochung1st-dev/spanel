@@ -4,11 +4,10 @@
 # Thêm domain mới vào SPanel
 #==============================================================================
 
-set -e
-
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -16,160 +15,217 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
-NGINX_CONF_DIR="$SPANEL_DIR/nginx"
-SPANEL_USER="${SPANEL_USER:-spanel}"
-SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
+WWW_DIR="/var/www"
+NGINX_CONF="$SPANEL_DIR/nginx/conf"
 
 #------------------------------------------------------------------------------
-# Tạo thư mục domain
+# Print header
 #------------------------------------------------------------------------------
 
-create_domain_dirs() {
+print_header() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       SPanel - Add Domain               ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+}
+
+#------------------------------------------------------------------------------
+# Check root
+#------------------------------------------------------------------------------
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Usage
+#------------------------------------------------------------------------------
+
+usage() {
+    echo ""
+    echo "Usage: v-add-domain <domain> [options]"
+    echo ""
+    echo "Options:"
+    echo "  --ssl           Kich hoat SSL (self-signed)"
+    echo "  --letsencrypt   Kich hoat SSL (Let's Encrypt)"
+    echo "  --enable        Enable domain sau khi tao"
+    echo ""
+    echo "Examples:"
+    echo "  v-add-domain example.com"
+    echo "  v-add-domain example.com --ssl"
+    echo "  v-add-domain example.com --ssl --enable"
+    exit 1
+}
+
+#------------------------------------------------------------------------------
+# Create domain directories
+#------------------------------------------------------------------------------
+
+create_dirs() {
     local domain=$1
 
-    log_info "Tạo cấu trúc thư mục cho $domain..."
+    log_info "Tao cau truc thu muc..."
 
-    mkdir -p $SCRIPT_DIR/var/www/$domain/{config,logs,public_html,cgi,tmp}
-    mkdir -p $SCRIPT_DIR/var/www/$domain/logs/{nginx,ssl}
-    mkdir -p $SCRIPT_DIR/var/www/$domain/config/{ssl,backup}
+    mkdir -p "$WWW_DIR/$domain/public_html"
+    mkdir -p "$WWW_DIR/$domain/logs"
 
-    # Tạo index.html mặc định
-    cat > $SCRIPT_DIR/var/www/$domain/public_html/index.html <<EOF
+    # Default index.html
+    cat > "$WWW_DIR/$domain/public_html/index.html" << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Welcome to $domain</title>
+    <title>Welcome</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
+        body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
         h1 { color: #333; }
+        .info { color: #666; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>Welcome to $domain</h1>
-    <p>Website is being set up.</p>
+    <h1>Welcome to your new website!</h1>
+    <p class="info">This is the default page for SPanel.</p>
 </body>
 </html>
 EOF
 
-    # Tạo .htaccess cơ bản
-    cat > $SCRIPT_DIR/var/www/$domain/public_html/.htaccess <<EOF
-# Enable rewrite engine
-RewriteEngine On
-
-# Block sensitive files
-<FilesMatch "\.(env|log|ini|conf)$">
-    Order Allow,Deny
-    Deny from all
-</FilesMatch>
-EOF
-
-    # Phân quyền
-    chown -R $SPANEL_USER:$SPANEL_GROUP $SCRIPT_DIR/var/www/$domain
-    chmod 755 $SCRIPT_DIR/var/www/$domain/public_html
-    chmod 640 $SCRIPT_DIR/var/www/$domain/public_html/.htaccess
-
-    log_info "Đã tạo cấu trúc thư mục"
+    log_info "Da tao thu muc"
 }
 
 #------------------------------------------------------------------------------
-# Tạo Nginx vhost
+# Create nginx config
 #------------------------------------------------------------------------------
 
 create_vhost() {
     local domain=$1
-    local port=${2:-80}
-    local ssl=${3:-false}
+    local enable_ssl=$2
 
-    log_info "Tạo Nginx vhost cho $domain..."
+    log_info "Tao nginx config..."
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
 
-    if $ssl; then
-        local ssl_cert="$SPANEL_DIR/ssl/$domain/fullchain.pem"
-        local ssl_key="$SPANEL_DIR/ssl/$domain/privkey.pem"
-
-        cat > $conf_file <<EOF
+    if [[ "$enable_ssl" == "yes" ]]; then
+        cat > "$conf_file" << EOF
 server {
     listen 80;
-    server_name $domain;
-    return 301 https://\$server_name\$request_uri;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name $domain;
+    listen [::]:443 ssl http2;
+    server_name $domain www.$domain;
 
-    root $SCRIPT_DIR/var/www/$domain/public_html;
-    index index.php index.html index.htm;
+    root $WWW_DIR/$domain/public_html;
+    index index.html index.htm index.php;
 
-    access_log $SCRIPT_DIR/var/www/$domain/logs/nginx/access.log;
-    error_log $SCRIPT_DIR/var/www/$domain/logs/nginx/error.log;
+    access_log $WWW_DIR/$domain/logs/access.log;
+    error_log $WWW_DIR/$domain/logs/error.log;
 
-    ssl_certificate $ssl_cert;
-    ssl_certificate_key $ssl_key;
+    ssl_certificate $SPANEL_DIR/ssl/$domain/fullchain.pem;
+    ssl_certificate_key $SPANEL_DIR/ssl/$domain/privkey.pem;
+
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
 
-    # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
 
-    # Lua modules
-    set \$lua_root $SPANEL_DIR/lua;
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
 
-    # WAF
-    set \$waf_mode active;
-    set \$waf_rule_dir $SPANEL_DIR/waf/rules;
+    location ~ \.php\$ {
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
 
-    # Cache
-    set \$cache_enabled true;
-
-    include $SPANEL_DIR/nginx/conf.d/cache.conf;
-    include $SPANEL_DIR/nginx/conf.d/lua.conf;
-    include $SPANEL_DIR/nginx/conf.d/waf.conf;
+    location ~ /\. {
+        deny all;
+    }
 }
 EOF
     else
-        cat > $conf_file <<EOF
+        cat > "$conf_file" << EOF
 server {
-    listen $port;
-    server_name $domain;
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
 
-    root $SCRIPT_DIR/var/www/$domain/public_html;
-    index index.php index.html index.htm;
+    root $WWW_DIR/$domain/public_html;
+    index index.html index.htm index.php;
 
-    access_log $SCRIPT_DIR/var/www/$domain/logs/nginx/access.log;
-    error_log $SCRIPT_DIR/var/www/$domain/logs/nginx/error.log;
+    access_log $WWW_DIR/$domain/logs/access.log;
+    error_log $WWW_DIR/$domain/logs/error.log;
 
-    # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
 
-    # Lua modules
-    set \$lua_root $SPANEL_DIR/lua;
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
 
-    # WAF
-    set \$waf_mode active;
-    set \$waf_rule_dir $SPANEL_DIR/waf/rules;
+    location ~ \.php\$ {
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
 
-    # Cache
-    set \$cache_enabled true;
-
-    include $SPANEL_DIR/nginx/conf.d/cache.conf;
-    include $SPANEL_DIR/nginx/conf.d/lua.conf;
-    include $SPANEL_DIR/nginx/conf.d/waf.conf;
+    location ~ /\. {
+        deny all;
+    }
 }
 EOF
     fi
 
-    chown root:$SPANEL_GROUP $conf_file
-    chmod 640 $conf_file
+    chmod 644 "$conf_file"
+    log_info "Da tao config"
+}
 
-    log_info "Đã tạo vhost config"
+#------------------------------------------------------------------------------
+# Create SSL certificate
+#------------------------------------------------------------------------------
+
+create_ssl() {
+    local domain=$1
+    local ssl_type=$2
+
+    log_info "Tao SSL certificate..."
+
+    local cert_dir="$SPANEL_DIR/ssl/$domain"
+    mkdir -p "$cert_dir"
+
+    if [[ "$ssl_type" == "letsencrypt" ]]; then
+        if command -v certbot &>/dev/null; then
+            certbot certonly --webroot \
+                --webroot-path "$WWW_DIR/$domain/public_html" \
+                --domain "$domain" \
+                --email "admin@$domain" \
+                --agree-tos \
+                --noninteractive 2>/dev/null || {
+                log_warn "Let's Encrypt that bai, su dung self-signed"
+                ssl_type="selfsigned"
+            }
+        else
+            log_warn "Certbot khong co san"
+            ssl_type="selfsigned"
+        fi
+    fi
+
+    if [[ "$ssl_type" == "selfsigned" ]] || [[ ! -f "$cert_dir/fullchain.pem" ]]; then
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$cert_dir/privkey.pem" \
+            -out "$cert_dir/fullchain.pem" \
+            -subj "/C=VN/ST=HCM/L=HCM/O=SPanel/CN=$domain"
+        log_info "Da tao self-signed certificate"
+    fi
 }
 
 #------------------------------------------------------------------------------
@@ -179,74 +235,105 @@ EOF
 enable_domain() {
     local domain=$1
 
-    log_info "Enable domain $domain..."
+    log_info "Enable domain..."
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
-    local enabled_link="$NGINX_CONF_DIR/sites-enabled/$domain.conf"
+    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+    local enabled_link="$NGINX_CONF/sites-enabled/$domain.conf"
 
-    if [[ ! -f $conf_file ]]; then
-        log_error "Không tìm thấy config cho $domain"
+    if [[ ! -f "$conf_file" ]]; then
+        log_error "Config khong ton tai"
         return 1
     fi
 
-    if [[ ! -L $enabled_link ]]; then
-        ln -sf $conf_file $enabled_link
-        log_info "Đã enable $domain"
-    else
-        log_warn "$domain đã được enable"
+    if [[ -L "$enabled_link" ]]; then
+        log_warn "$domain da duoc enable"
+        return 0
     fi
 
-    # Test và reload nginx
-    if $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null; then
-        $SPANEL_DIR/nginx/sbin/nginx -s reload 2>/dev/null || true
-        log_info "Đã reload Nginx"
+    ln -sf "$conf_file" "$enabled_link"
+
+    # Test nginx
+    if /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
+        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
+        log_info "Da enable $domain"
     else
-        log_error "Cấu hình Nginx có lỗi"
+        log_error "Nginx config loi"
+        rm -f "$enabled_link"
         return 1
     fi
 }
 
 #------------------------------------------------------------------------------
-# Tạo SSL certificate
+# Add domain
 #------------------------------------------------------------------------------
 
-create_ssl() {
+add_domain() {
     local domain=$1
-    local type=${2:-selfsigned}
+    local enable_ssl="no"
+    local enable_domain="no"
+    local ssl_type="selfsigned"
 
-    log_info "Tạo SSL certificate ($type) cho $domain..."
+    # Parse arguments
+    shift
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --ssl)
+                enable_ssl="yes"
+                ssl_type="selfsigned"
+                ;;
+            --letsencrypt)
+                enable_ssl="yes"
+                ssl_type="letsencrypt"
+                ;;
+            --enable)
+                enable_domain="yes"
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
 
-    local cert_dir="$SPANEL_DIR/ssl/$domain"
-    mkdir -p $cert_dir
-
-    if [[ $type == "letsencrypt" ]]; then
-        if command -v certbot &> /dev/null; then
-            certbot certonly --webroot \
-                --webroot-path $SCRIPT_DIR/var/www/$domain/public_html \
-                --domain $domain \
-                --email "${3:-admin@$domain}" \
-                --agree-tos \
-                --noninteractive \
-                --cert-path $cert_dir/fullchain.pem \
-                --key-path $cert_dir/privkey.pem
-        else
-            log_warn "Certbot không có sẵn, sử dụng self-signed"
-            type="selfsigned"
-        fi
+    # Validate domain
+    if [[ -z "$domain" ]]; then
+        usage
     fi
 
-    if [[ $type == "selfsigned" ]]; then
-        openssl req -x509 \
-            -nodes -days 365 -newkey rsa:2048 \
-            -keyout $cert_dir/privkey.pem \
-            -out $cert_dir/fullchain.pem \
-            -subj "/C=VN/ST=HCM/L=HCM/O=SPanel/CN=$domain"
-
-        log_info "Đã tạo self-signed certificate"
+    # Check if domain exists
+    if [[ -d "$WWW_DIR/$domain" ]]; then
+        log_error "Domain $domain da ton tai"
+        exit 1
     fi
 
-    chown root:$SPANEL_GROUP $cert_dir/*.pem
-    chmod 640 $cert_dir/*.pem
+    # Check if config exists
+    if [[ -f "$NGINX_CONF/sites-available/$domain.conf" ]]; then
+        log_error "Config cho $domain da ton tai"
+        exit 1
+    fi
+
+    print_header
+    echo ""
+    echo "Domain: $domain"
+    echo "SSL: $enable_ssl"
+    echo "Enable: $enable_domain"
+    echo ""
+
+    # Create
+    create_dirs "$domain"
+
+    if [[ "$enable_ssl" == "yes" ]]; then
+        create_ssl "$domain" "$ssl_type"
+    fi
+
+    create_vhost "$domain" "$enable_ssl"
+
+    if [[ "$enable_domain" == "yes" ]]; then
+        enable_domain "$domain"
+    fi
+
+    echo ""
+    log_info "Da tao domain $domain thanh cong!"
+    echo ""
 }
 
 #------------------------------------------------------------------------------
@@ -254,86 +341,13 @@ create_ssl() {
 #------------------------------------------------------------------------------
 
 main() {
-    local action=${1:-help}
+    check_root
 
-    case $action in
-        add)
-            local domain=$2
-            local port=${3:-80}
-            local ssl=${4:-false}
-            local ssl_type=${5:-selfsigned}
-            local email=${6:-}
+    if [[ $# -eq 0 ]]; then
+        usage
+    fi
 
-            if [[ -z $domain ]]; then
-                log_error "Domain không được để trống"
-                echo "Usage: $0 add <domain> [port] [ssl] [ssl_type] [email]"
-                exit 1
-            fi
-
-            # Kiểm tra domain đã tồn tại chưa
-            if [[ -d $SCRIPT_DIR/var/www/$domain ]]; then
-                log_error "Domain $domain đã tồn tại"
-                exit 1
-            fi
-
-            create_domain_dirs $domain
-
-            if [[ $ssl == "y" ]]; then
-                create_ssl $domain $ssl_type $email
-            fi
-
-            create_vhost $domain $port $([[ $ssl == "y" ]] && echo "true" || echo "false")
-            enable_domain $domain
-
-            log_info "Đã tạo domain $domain thành công!"
-            ;;
-        enable)
-            local domain=$2
-            if [[ -z $domain ]]; then
-                log_error "Domain không được để trống"
-                exit 1
-            fi
-            enable_domain $domain
-            ;;
-        ssl)
-            local domain=$2
-            local ssl_type=${3:-selfsigned}
-            local email=${4:-}
-
-            if [[ -z $domain ]]; then
-                log_error "Domain không được để trống"
-                exit 1
-            fi
-
-            create_ssl $domain $ssl_type $email
-
-            # Cập nhật vhost để hỗ trợ SSL
-            create_vhost $domain 443 true
-            enable_domain $domain
-
-            log_info "Đã thêm SSL cho $domain"
-            ;;
-        help)
-            echo "Usage: $0 {add|enable|ssl} [arguments]"
-            echo ""
-            echo "Commands:"
-            echo "  add <domain> [port] [ssl] [ssl_type] [email]"
-            echo "    Tạo domain mới"
-            echo "    port: 80 (default) hoặc 443"
-            echo "    ssl: y hoặc n (default)"
-            echo "    ssl_type: selfsigned (default) hoặc letsencrypt"
-            echo ""
-            echo "  enable <domain>"
-            echo "    Enable một domain đã tồn tại"
-            echo ""
-            echo "  ssl <domain> [type] [email]"
-            echo "    Thêm SSL cho domain"
-            echo ""
-            ;;
-        *)
-            echo "Usage: $0 {add|enable|ssl|help}"
-            ;;
-    esac
+    add_domain "$@"
 }
 
 main "$@"

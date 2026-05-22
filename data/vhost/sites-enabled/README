@@ -1,0 +1,2 @@
+# This directory contains symlinks to enabled vhost configurations
+# Do not edit files here directly - edit in sites-available and symlink here

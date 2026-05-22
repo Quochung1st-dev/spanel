@@ -1,0 +1,184 @@
+#!/bin/bash
+#==============================================================================
+# v-list-domain
+# Danh sách domain trong SPanel
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+NGINX_CONF="$SPANEL_DIR/nginx/conf"
+
+#------------------------------------------------------------------------------
+# Header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       SPanel - Domain List              ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+}
+
+#------------------------------------------------------------------------------
+# Format size
+#------------------------------------------------------------------------------
+
+format_size() {
+    local size=$1
+    if [[ -f /usr/bin/bc ]]; then
+        if [[ $size -ge 1073741824 ]]; then
+            echo "$(echo "scale=2; $size/1073741824" | bc)G"
+        elif [[ $size -ge 1048576 ]]; then
+            echo "$(echo "scale=2; $size/1048576" | bc)M"
+        elif [[ $size -ge 1024 ]]; then
+            echo "$(echo "scale=2; $size/1024" | bc)K"
+        else
+            echo "${size}B"
+        fi
+    else
+        echo "${size}B"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# List domains
+#------------------------------------------------------------------------------
+
+list_all() {
+    local count=0
+    local enabled=0
+    local disabled=0
+
+    echo ""
+    echo -e "${GREEN}── Enabled ──${NC}"
+
+    if [[ -d "$NGINX_CONF/sites-enabled" ]]; then
+        for conf in "$NGINX_CONF/sites-enabled"/*.conf; do
+            [[ -f "$conf" ]] || continue
+
+            local domain=$(basename "$conf" .conf)
+            ((count++))
+            ((enabled++))
+
+            local size="N/A"
+            if [[ -d "/var/www/$domain" ]]; then
+                size=$(du -sb "/var/www/$domain" 2>/dev/null | awk '{print $1}')
+                size=$(format_size $size)
+            fi
+
+            local ssl="${YELLOW}○${NC}"
+            [[ -f "$SPANEL_DIR/ssl/$domain/fullchain.pem" ]] && ssl="${GREEN}✓${NC}"
+
+            printf "  ${CYAN}%-25s${NC} | SSL ${ssl} | ${size}\n" "$domain"
+        done
+    fi
+
+    [[ $enabled -eq 0 ]] && echo "  (trống)"
+
+    echo ""
+    echo -e "${YELLOW}── Disabled ──${NC}"
+
+    if [[ -d "$NGINX_CONF/sites-available" ]]; then
+        for conf in "$NGINX_CONF/sites-available"/*.conf; do
+            [[ -f "$conf" ]] || continue
+
+            local domain=$(basename "$conf" .conf)
+            [[ -L "$NGINX_CONF/sites-enabled/$domain.conf" ]] && continue
+            [[ "$domain" == "default" ]] && continue
+            [[ "$domain" == "panel" ]] && continue
+
+            ((count++))
+            ((disabled++))
+
+            printf "  ${YELLOW}%-25s${NC}\n" "$domain"
+        done
+    fi
+
+    [[ $disabled -eq 0 ]] && echo "  (trống)"
+
+    echo ""
+    echo "────────────────────────────────────────"
+    printf "  ${CYAN}%-25s${NC} | ${GREEN}enabled${NC}: %d | ${YELLOW}disabled${NC}: %d\n" "Total: $count" $enabled $disabled
+}
+
+#------------------------------------------------------------------------------
+# Detail domain
+#------------------------------------------------------------------------------
+
+show_detail() {
+    local domain=$1
+
+    if [[ -z "$domain" ]]; then
+        printf "${RED}Usage: v-list-domain <domain>${NC}\n"
+        return 1
+    fi
+
+    local conf="$NGINX_CONF/sites-available/$domain.conf"
+    local www_dir="/var/www/$domain"
+
+    if [[ ! -f "$conf" ]]; then
+        printf "${RED}Domain '$domain' not found${NC}\n"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BLUE}── $domain ──${NC}"
+    echo ""
+
+    # Status
+    local status="${YELLOW}disabled${NC}"
+    [[ -L "$NGINX_CONF/sites-enabled/$domain.conf" ]] && status="${GREEN}enabled${NC}"
+    echo -e "  Status:    $status"
+
+    # Root
+    local root=$(grep "root " "$conf" | head -1 | awk '{print $2}' | tr -d ';')
+    echo "  Root:      ${root:-N/A}"
+
+    # SSL
+    if [[ -f "$SPANEL_DIR/ssl/$domain/fullchain.pem" ]]; then
+        echo -e "  SSL:       ${GREEN}enabled${NC}"
+        local expiry=$(openssl x509 -in "$SPANEL_DIR/ssl/$domain/fullchain.pem" -noout -enddate 2>/dev/null | cut -d= -f2)
+        [[ -n "$expiry" ]] && echo "  Expires:   $expiry"
+    else
+        echo -e "  SSL:       ${YELLOW}not configured${NC}"
+    fi
+
+    # Disk
+    if [[ -d "$www_dir" ]]; then
+        local size=$(du -sh "$www_dir" 2>/dev/null | awk '{print $1}')
+        echo "  Disk:      $size"
+    fi
+
+    # Logs
+    echo ""
+    echo "  Logs:"
+    [[ -f "$www_dir/logs/access.log" ]] && echo "    Access:   $www_dir/logs/access.log"
+    [[ -f "$www_dir/logs/error.log" ]] && echo "    Error:    $www_dir/logs/error.log"
+}
+
+#------------------------------------------------------------------------------
+# MAIN
+#------------------------------------------------------------------------------
+
+main() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}Need root privileges${NC}"
+        exit 1
+    fi
+
+    if [[ -n "$1" ]]; then
+        show_detail "$1"
+    else
+        print_header
+        list_all
+        echo ""
+    fi
+}
+
+main "$@"

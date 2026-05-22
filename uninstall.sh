@@ -76,12 +76,17 @@ confirm_uninstall() {
         echo -e "${YELLOW}  -- KHÔNG xóa /var/www (thêm --clear để xóa)${NC}"
     fi
     echo ""
-
-    read -p "Chắc chắn muốn gỡ cài đặt? (yes/no): " -r
-    if [[ ! "$REPLY" =~ ^yes$ ]]; then
-        echo "Đã hủy."
-        exit 0
-    fi
+    printf "Chắc chắn muốn gỡ cài đặt? (yes/no): "
+    read -r REPLY
+    case "$REPLY" in
+        yes|Yes|YES)
+            echo ""
+            ;;
+        *)
+            echo "Đã hủy."
+            exit 0
+            ;;
+    esac
 }
 
 #------------------------------------------------------------------------------

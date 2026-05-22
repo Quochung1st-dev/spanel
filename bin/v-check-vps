@@ -148,11 +148,20 @@ if [[ -f /etc/systemd/system/spanel.service ]]; then
     if systemctl is-active --quiet spanel 2>/dev/null; then
         echo -e "  ${GREEN}✓${NC} SPanel Service"
         services_ok=$((services_ok + 1))
+    elif pgrep -x nginx > /dev/null 2>&1; then
+        # Nginx running but not via systemd
+        echo -e "  ${GREEN}✓${NC} SPanel Service (nginx)"
+        services_ok=$((services_ok + 1))
     else
         echo -e "  ${RED}✗${NC} SPanel Service"
     fi
 else
-    echo -e "  ${YELLOW}○${NC} SPanel Service (not installed)"
+    if pgrep -x nginx > /dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} SPanel Service (nginx)"
+        services_ok=$((services_ok + 1))
+    else
+        echo -e "  ${YELLOW}○${NC} SPanel Service (not installed)"
+    fi
 fi
 services_total=$((services_total + 1))
 

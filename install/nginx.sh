@@ -70,6 +70,12 @@ install_nginx_config() {
         cp -r "$SCRIPT_DIR/data/nginx/sites-available/"* $nginx_conf_dir/sites-available/
     fi
 
+    # Copy vhost configs
+    if [[ -d "$SCRIPT_DIR/data/vhost/sites-available" ]]; then
+        mkdir -p $nginx_conf_dir/vhost
+        cp -r "$SCRIPT_DIR/data/vhost/"* $nginx_conf_dir/vhost/
+    fi
+
     # Tạo symlink các site
     for site in $nginx_conf_dir/sites-available/*.conf; do
         if [[ -f "$site" ]]; then

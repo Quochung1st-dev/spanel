@@ -98,6 +98,7 @@ configure_crowdsec() {
     # Ensure config is valid
     /usr/bin/crowdsec -c /etc/crowdsec/config.yaml -t 2>/dev/null || {
         log_warn "CrowdSec config lỗi - sửa..."
+        mkdir -p /etc/crowdsec
         cat > /etc/crowdsec/config.yaml << 'EOFCONFIG'
 common:
   daemonize: false

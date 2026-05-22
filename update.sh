@@ -59,7 +59,7 @@ update_bin_scripts() {
         log_warn "Không tìm thấy $SCRIPT_DIR/bin"
     fi
 
-    local bin_links="v-check-vps v-manager-domain v-add-domain v-change-domain v-delete-domain"
+    local bin_links="v-check-vps v-list-domain v-add-domain v-change-domain v-delete-domain"
     for bin in $bin_links; do
         if [[ -f "$SPANEL_DIR/bin/$bin" ]]; then
             ln -sf "$SPANEL_DIR/bin/$bin" "/usr/local/bin/$bin"
@@ -79,6 +79,16 @@ update_data() {
         mkdir -p "$SPANEL_DIR/nginx/conf"
         cp -rf "$SCRIPT_DIR/data/nginx/"* "$SPANEL_DIR/nginx/conf/"
         log_info "Đã cập nhật nginx configs"
+
+        # Create sites-enabled symlinks
+        mkdir -p "$SPANEL_DIR/nginx/conf/sites-enabled"
+        if [[ -f "$SPANEL_DIR/nginx/conf/sites-available/default.conf" ]]; then
+            ln -sf "$SPANEL_DIR/nginx/conf/sites-available/default.conf" "$SPANEL_DIR/nginx/conf/sites-enabled/default.conf" 2>/dev/null || true
+        fi
+        if [[ -f "$SPANEL_DIR/nginx/conf/sites-available/panel.conf" ]]; then
+            ln -sf "$SPANEL_DIR/nginx/conf/sites-available/panel.conf" "$SPANEL_DIR/nginx/conf/sites-enabled/panel.conf" 2>/dev/null || true
+        fi
+        log_info "Đã tạo sites-enabled symlinks"
     fi
 
     if [[ -d "$SCRIPT_DIR/data/lua" ]]; then
