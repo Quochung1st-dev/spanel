@@ -143,21 +143,6 @@ else
 fi
 services_total=$((services_total + 1))
 
-# CrowdSec (optional)
-/*
-if command -v cscli > /dev/null 2>&1; then
-    if systemctl is-active --quiet crowdsec 2>/dev/null; then
-        echo -e "  ${GREEN}✓${NC} CrowdSec"
-        services_ok=$((services_ok + 1))
-    else
-        echo -e "  ${YELLOW}○${NC} CrowdSec (stopped)"
-    fi
-else
-    echo -e "  ${YELLOW}○${NC} CrowdSec (not installed)"
-fi
-services_total=$((services_total + 1))
-*/
-
 # SPanel Service
 if [[ -f /etc/systemd/system/spanel.service ]]; then
     if systemctl is-active --quiet spanel 2>/dev/null; then
