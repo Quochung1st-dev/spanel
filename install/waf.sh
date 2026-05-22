@@ -18,6 +18,9 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 NGINX_USER="${NGINX_USER:-www-data}"
 
+# Xác định SCRIPT_DIR (thư mục source - git clone)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 #------------------------------------------------------------------------------
 # Cài đặt WAF rules
 #------------------------------------------------------------------------------
@@ -30,12 +33,12 @@ install_waf_rules() {
     mkdir -p $waf_dir/logs
 
     # Copy WAF rules
-    cp -r data/waf/* $waf_dir/
+    cp -r "$SCRIPT_DIR/data/waf/"* $waf_dir/
 
     # Phân quyền
     chown -R root:$NGINX_USER $waf_dir
-    chmod 640 $waf_dir/*.lua
-    chmod 640 $waf_dir/rules/*
+    chmod 640 $waf_dir/*.lua 2>/dev/null || true
+    chmod 640 $waf_dir/rules/* 2>/dev/null || true
     chmod 755 $waf_dir/logs
 
     log_info "Đã cài đặt WAF rules vào $waf_dir"

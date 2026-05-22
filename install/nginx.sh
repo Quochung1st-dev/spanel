@@ -19,6 +19,9 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 NGINX_USER="${NGINX_USER:-www-data}"
 NGINX_VERSION="${NGINX_VERSION:-1.27.0}"
 
+# Xác định SCRIPT_DIR (thư mục source - git clone)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 #------------------------------------------------------------------------------
 # Kiểm tra Nginx đã cài đặt chưa
 #------------------------------------------------------------------------------
@@ -119,23 +122,32 @@ install_nginx_config() {
     local nginx_conf_dir="$SPANEL_DIR/nginx/conf"
 
     # Copy nginx.conf chính
-    cp data/nginx/nginx.conf $nginx_conf_dir/nginx.conf
+    cp "$SCRIPT_DIR/data/nginx/nginx.conf" $nginx_conf_dir/nginx.conf
 
     # Copy mime.types
-    cp data/nginx/mime.types $nginx_conf_dir/mime.types
+    cp "$SCRIPT_DIR/data/nginx/mime.types" $nginx_conf_dir/mime.types
 
     # Copy các block config trong conf.d
     mkdir -p $nginx_conf_dir/conf.d
-    cp -r data/nginx/conf.d/* $nginx_conf_dir/conf.d/
+    if [[ -d "$SCRIPT_DIR/data/nginx/conf.d" ]]; then
+        cp -r "$SCRIPT_DIR/data/nginx/conf.d/"* $nginx_conf_dir/conf.d/
+    fi
 
     # Tạo thư mục sites-available và sites-enabled
     mkdir -p $nginx_conf_dir/sites-available
     mkdir -p $nginx_conf_dir/sites-enabled
 
+    # Copy các site configs từ data
+    if [[ -d "$SCRIPT_DIR/data/nginx/sites-available" ]]; then
+        cp -r "$SCRIPT_DIR/data/nginx/sites-available/"* $nginx_conf_dir/sites-available/
+    fi
+
     # Tạo symlink các site
-    for site in $nginx_conf_dir/sites-available/*; do
-        local name=$(basename $site)
-        ln -sf $site $nginx_conf_dir/sites-enabled/$name 2>/dev/null || true
+    for site in $nginx_conf_dir/sites-available/*.conf; do
+        if [[ -f "$site" ]]; then
+            local name=$(basename "$site")
+            ln -sf "$site" $nginx_conf_dir/sites-enabled/"$name" 2>/dev/null || true
+        fi
     done
 
     # Phân quyền
