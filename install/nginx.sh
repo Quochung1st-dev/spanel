@@ -1,7 +1,7 @@
 #!/bin/bash
 #==============================================================================
-# Nginx Installer
-# Cài đặt và cấu hình Nginx
+# Nginx Config Installer
+# Cài đặt và cấu hình Nginx config (OpenResty đã cài ở openresty.sh)
 #==============================================================================
 
 set -e
@@ -17,99 +17,26 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 NGINX_USER="${NGINX_USER:-www-data}"
-NGINX_VERSION="${NGINX_VERSION:-1.27.0}"
+OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 
 # Xác định SCRIPT_DIR (thư mục source - git clone)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 #------------------------------------------------------------------------------
-# Kiểm tra Nginx đã cài đặt chưa
+# Kiểm tra OpenResty/Nginx đã cài đặt chưa
 #------------------------------------------------------------------------------
 
 check_nginx_installed() {
-    log_info "Kiểm tra Nginx..."
+    log_info "Kiểm tra OpenResty/Nginx..."
 
-    if command -v nginx &> /dev/null; then
-        local installed_version=$(nginx -v 2>&1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
-        log_info "Nginx đã được cài đặt (version: $installed_version)"
+    if [[ -f "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
+        local installed_version=$("$OPENRESTY_DIR/nginx/sbin/nginx" -v 2>&1 | grep -oP '\d+\.\d+\.\d+')
+        log_info "OpenResty/Nginx đã được cài đặt (version: $installed_version)"
         return 0
     else
-        log_warn "Nginx chưa được cài đặt"
+        log_error "OpenResty/Nginx chưa được cài đặt - chạy openresty.sh trước"
         return 1
     fi
-}
-
-#------------------------------------------------------------------------------
-# Cài đặt Nginx từ source
-#------------------------------------------------------------------------------
-
-install_nginx_from_source() {
-    log_info "Cài đặt Nginx $NGINX_VERSION từ source..."
-
-    local build_dir="/tmp/nginx-build-$$"
-    mkdir -p $build_dir
-    cd $build_dir
-
-    # Cài đặt các thư viện cần thiết
-    apt-get update
-    apt-get install -y \
-        build-essential \
-        libpcre3 \
-        libpcre3-dev \
-        zlib1g \
-        zlib1g-dev \
-        libssl-dev \
-        libgd-dev \
-        libgeoip-dev \
-        libperl4-corelibril-perl
-
-    # Tải Nginx
-    wget -q https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz
-    tar -xzf nginx-$NGINX_VERSION.tar.gz
-    cd nginx-$NGINX_VERSION
-
-    # Cấu hình build
-    ./configure \
-        --prefix=$SPANEL_DIR/nginx \
-        --user=$NGINX_USER \
-        --group=$NGINX_USER \
-        --with-http_ssl_module \
-        --with-http_v2_module \
-        --with-http_v3_module \
-        --with-http_realip_module \
-        --with-http_addition_module \
-        --with-http_sub_module \
-        --with-http_flv_module \
-        --with-http_mp4_module \
-        --with-http_gunzip_module \
-        --with-http_gzip_static_module \
-        --with-http_random_index_module \
-        --with-http_secure_link_module \
-        --with-http_stub_status_module \
-        --with-http_auth_request_module \
-        --with-http_image_filter_module \
-        --with-http_slice_module \
-        --with-threads \
-        --with-stream \
-        --with-stream_ssl_module \
-        --with-stream_realip_module \
-        --with-stream_ssl_preread_module \
-        --with-pcre \
-        --with-pcre-jit \
-        --with-google_rate_limit \
-        --with-cc-opt="-O3" \
-        --with-ld-opt="-Wl,-rpath,/usr/local/lib" \
-        --with-debug
-
-    # Build và cài đặt
-    make -j$(nproc)
-    make install
-
-    # Cleanup
-    cd /
-    rm -rf $build_dir
-
-    log_info "Đã cài đặt Nginx $NGINX_VERSION vào $SPANEL_DIR/nginx"
 }
 
 #------------------------------------------------------------------------------
@@ -121,6 +48,12 @@ install_nginx_config() {
 
     local nginx_conf_dir="$SPANEL_DIR/nginx/conf"
 
+    # Tạo thư mục
+    mkdir -p $nginx_conf_dir
+    mkdir -p $nginx_conf_dir/conf.d
+    mkdir -p $nginx_conf_dir/sites-available
+    mkdir -p $nginx_conf_dir/sites-enabled
+
     # Copy nginx.conf chính
     cp "$SCRIPT_DIR/data/nginx/nginx.conf" $nginx_conf_dir/nginx.conf
 
@@ -128,14 +61,9 @@ install_nginx_config() {
     cp "$SCRIPT_DIR/data/nginx/mime.types" $nginx_conf_dir/mime.types
 
     # Copy các block config trong conf.d
-    mkdir -p $nginx_conf_dir/conf.d
     if [[ -d "$SCRIPT_DIR/data/nginx/conf.d" ]]; then
         cp -r "$SCRIPT_DIR/data/nginx/conf.d/"* $nginx_conf_dir/conf.d/
     fi
-
-    # Tạo thư mục sites-available và sites-enabled
-    mkdir -p $nginx_conf_dir/sites-available
-    mkdir -p $nginx_conf_dir/sites-enabled
 
     # Copy các site configs từ data
     if [[ -d "$SCRIPT_DIR/data/nginx/sites-available" ]]; then
@@ -159,45 +87,28 @@ install_nginx_config() {
 }
 
 #------------------------------------------------------------------------------
-# Tạo system user cho nginx
-#------------------------------------------------------------------------------
-
-create_nginx_user() {
-    log_info "Tạo user Nginx..."
-
-    if ! getent group $NGINX_USER &> /dev/null; then
-        groupadd -r $NGINX_USER
-        log_info "Đã tạo group: $NGINX_USER"
-    fi
-
-    if ! getent passwd $NGINX_USER &> /dev/null; then
-        useradd -r -g $NGINX_USER -s /bin/false -d /nonexistent -c "nginx user" $NGINX_USER
-        log_info "Đã tạo user: $NGINX_USER"
-    fi
-}
-
-#------------------------------------------------------------------------------
 # MAIN
 #------------------------------------------------------------------------------
 
 main() {
-    log_info "Bắt đầu cài đặt Nginx..."
+    log_info "Bắt đầu cài đặt Nginx Config..."
 
+    # OpenResty phải được cài trước
     if ! check_nginx_installed; then
-        create_nginx_user
-        install_nginx_from_source
+        log_error "Vui lòng chạy openresty.sh trước"
+        exit 1
     fi
 
     install_nginx_config
 
     # Test cấu hình
-    if $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null; then
+    if "$OPENRESTY_DIR/nginx/sbin/nginx" -t 2>/dev/null; then
         log_info "Cấu hình Nginx hợp lệ"
     else
         log_warn "Cấu hình Nginx có lỗi"
     fi
 
-    log_info "Hoàn tất cài đặt Nginx"
+    log_info "Hoàn tất cài đặt Nginx Config"
 }
 
 main "$@"

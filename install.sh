@@ -27,6 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Trong prod: /var/server (đã set trong .env)
 # Trong dev: có thể = SCRIPT_DIR nếu chạy tại chỗ
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 
 #------------------------------------------------------------------------------
 # Kiểm tra root
@@ -174,7 +175,7 @@ finish_installation() {
     echo ""
     echo "Các bước tiếp theo:"
     echo "  1. Chỉnh sửa $SPANEL_DIR/.env"
-    echo "  2. Khởi động Nginx: $SPANEL_DIR/nginx/sbin/nginx"
+    echo "  2. Khởi động Nginx: $OPENRESTY_DIR/nginx/sbin/nginx"
     echo "  3. Kiểm tra VPS: v-check-vps"
     echo "  4. Quản lý domain: v-manager-domain"
     echo ""
@@ -192,12 +193,16 @@ main() {
     check_dependencies
 
     # Cài đặt theo thứ tự
-    run_install_script "user.sh" "User & Group"
-    run_install_script "nginx.sh" "Nginx"
-    run_install_script "lua.sh" "Lua"
+    # 1. OpenResty (nginx + LuaJIT) trước vì bao gồm cả hai
+    # 2. Cấu hình nginx (nginx.conf, sites-available, conf.d)
+    # 3. WAF rules
+    # 4. SSL certificates
+    # 5. User & Group (tạo cuối để tránh lỗi phân quyền)
+    run_install_script "openresty.sh" "OpenResty (Nginx + LuaJIT)"
+    run_install_script "nginx.sh" "Nginx Config"
     run_install_script "waf.sh" "WAF"
     run_install_script "ssl.sh" "SSL"
-    run_install_script "domain.sh" "Domain"
+    run_install_script "user.sh" "User & Group"
 
     # Cài đặt systemd service và logrotate
     install_systemd_service
