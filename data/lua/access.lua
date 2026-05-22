@@ -33,7 +33,7 @@ local function waf_check()
         return true
     end
 
-    local waf = require "spanel.waf"
+    local waf = require "waf"
     local result = waf.check()
 
     if not result.pass then

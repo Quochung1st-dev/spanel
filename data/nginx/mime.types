@@ -16,7 +16,6 @@ types {
     font/woff2                            woff2;
     font/ttf                              ttf;
     font/eot                              eot;
-    application/vnd.ms-fontobject        eot;
     application/octet-stream             bin exe dll;
     application/x-shockwave-flash         swf;
     application/pdf                      pdf;
