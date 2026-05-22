@@ -1,2 +1,0 @@
-ROLE='admin'
-COMMANDS='v-add-database-temp-user,v-delete-database-temp-user'
