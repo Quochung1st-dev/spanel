@@ -118,9 +118,33 @@ EOF
     chown redis:redis /etc/redis/redis.conf
     chmod 640 /etc/redis/redis.conf
 
-    # Restart Redis
-    systemctl restart redis-server
-    systemctl enable redis-server
+    # Tạo symlink /etc/redis/redis.conf.default
+    ln -sf /etc/redis/redis.conf /etc/redis/redis.conf.default 2>/dev/null || true
+
+    # Chạy Redis (systemd có vấn đề trong một số container)
+    pkill redis-server 2>/dev/null || true
+    sleep 1
+
+    # Tạo thư mục logs
+    mkdir -p "$SPANEL_DIR/logs/redis"
+    chown redis:redis "$SPANEL_DIR/logs/redis"
+    chmod 750 "$SPANEL_DIR/logs/redis"
+
+    # Disable systemd service nếu không hoạt động
+    systemctl stop redis-server 2>/dev/null || true
+
+    # Chạy Redis như daemon
+    /usr/bin/redis-server /etc/redis/redis.conf --daemonize yes 2>/dev/null || \
+        /usr/bin/redis-server /etc/redis/redis.conf &
+
+    sleep 2
+
+    # Verify Redis đang chạy
+    if redis-cli ping &>/dev/null; then
+        log_info "Redis đang chạy"
+    else
+        log_warn "Redis không khởi động được qua systemd"
+    fi
 
     log_info "Đã cấu hình Redis"
 }
