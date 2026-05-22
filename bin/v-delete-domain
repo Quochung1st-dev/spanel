@@ -116,8 +116,8 @@ backup_domain() {
         log_info "Backup: $backup_file"
     fi
 
-    if [[ -d "$SPANEL_DIR/ssl/$domain" ]]; then
-        tar -czf "$backup_dir/ssl_${domain}_${timestamp}.tar.gz" -C "$SPANEL_DIR/ssl" "$domain" 2>/dev/null
+    if [[ -d "$WWW_DIR/$domain/ssl" ]]; then
+        tar -czf "$backup_dir/ssl_${domain}_${timestamp}.tar.gz" -C "$WWW_DIR" "$domain/ssl" 2>/dev/null
     fi
 }
 
@@ -160,17 +160,7 @@ delete_domain() {
     echo "Domain: $domain"
     echo ""
 
-    # Confirm
-    if [[ "$force" != "yes" ]]; then
-        printf "${YELLOW}Canh bao: Domain '$domain' se bi xoa!${NC}\n"
-        printf "Nhap 'yes' de xac nhan: "
-        read -r confirm
-        if [[ "$confirm" != "yes" ]]; then
-            echo "Da huy."
-            return 1
-        fi
-    fi
-
+    # Delete without confirmation (always force)
     # Backup
     if [[ "$no_backup" != "yes" ]]; then
         backup_domain "$domain"
@@ -189,9 +179,9 @@ delete_domain() {
         log_info "Da xoa thu muc www"
     fi
 
-    # Delete SSL
-    if [[ -d "$SPANEL_DIR/ssl/$domain" ]]; then
-        rm -rf "$SPANEL_DIR/ssl/$domain"
+    # Delete SSL (now in www/domain/ssl)
+    if [[ -d "$WWW_DIR/$domain/ssl" ]]; then
+        rm -rf "$WWW_DIR/$domain/ssl"
         log_info "Da xoa SSL"
     fi
 

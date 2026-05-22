@@ -51,7 +51,6 @@ usage() {
     echo "Options:"
     echo "  --ssl           Kich hoat SSL (self-signed)"
     echo "  --letsencrypt   Kich hoat SSL (Let's Encrypt)"
-    echo "  --enable        Enable domain sau khi tao"
     echo ""
     echo "Examples:"
     echo "  v-add-domain example.com"
@@ -71,6 +70,8 @@ create_dirs() {
 
     mkdir -p "$WWW_DIR/$domain/public_html"
     mkdir -p "$WWW_DIR/$domain/logs"
+    mkdir -p "$WWW_DIR/$domain/config"
+    mkdir -p "$WWW_DIR/$domain/ssl"
 
     # Default index.html
     cat > "$WWW_DIR/$domain/public_html/index.html" << 'EOF'
@@ -127,8 +128,8 @@ server {
     access_log $WWW_DIR/$domain/logs/access.log;
     error_log $WWW_DIR/$domain/logs/error.log;
 
-    ssl_certificate $SPANEL_DIR/ssl/$domain/fullchain.pem;
-    ssl_certificate_key $SPANEL_DIR/ssl/$domain/privkey.pem;
+    ssl_certificate $WWW_DIR/$domain/ssl/fullchain.pem;
+    ssl_certificate_key $WWW_DIR/$domain/ssl/privkey.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
@@ -199,7 +200,7 @@ create_ssl() {
 
     log_info "Tao SSL certificate..."
 
-    local cert_dir="$SPANEL_DIR/ssl/$domain"
+    local cert_dir="$WWW_DIR/$domain/ssl"
     mkdir -p "$cert_dir"
 
     if [[ "$ssl_type" == "letsencrypt" ]]; then
@@ -271,7 +272,6 @@ enable_domain() {
 add_domain() {
     local domain=$1
     local enable_ssl="no"
-    local enable_domain="no"
     local ssl_type="selfsigned"
 
     # Parse arguments
@@ -285,9 +285,6 @@ add_domain() {
             --letsencrypt)
                 enable_ssl="yes"
                 ssl_type="letsencrypt"
-                ;;
-            --enable)
-                enable_domain="yes"
                 ;;
             *)
                 ;;
@@ -316,7 +313,6 @@ add_domain() {
     echo ""
     echo "Domain: $domain"
     echo "SSL: $enable_ssl"
-    echo "Enable: $enable_domain"
     echo ""
 
     # Create
@@ -328,9 +324,8 @@ add_domain() {
 
     create_vhost "$domain" "$enable_ssl"
 
-    if [[ "$enable_domain" == "yes" ]]; then
-        enable_domain "$domain"
-    fi
+    # Always enable domain
+    enable_domain "$domain"
 
     echo ""
     log_info "Da tao domain $domain thanh cong!"

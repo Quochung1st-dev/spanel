@@ -1,0 +1,284 @@
+#!/bin/bash
+#==============================================================================
+# v-add-ssl
+# Them SSL cho domain
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+WWW_DIR="/var/www"
+NGINX_CONF="/var/server/nginx/conf"
+
+#------------------------------------------------------------------------------
+# Check root
+#------------------------------------------------------------------------------
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       SPanel - Add SSL                 ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+}
+
+#------------------------------------------------------------------------------
+# Usage
+#------------------------------------------------------------------------------
+
+usage() {
+    echo ""
+    echo "Usage: v-add-ssl <domain> [type]"
+    echo ""
+    echo "Type:"
+    echo "  letssl    Let's Encrypt (mac dinh)"
+    echo "  ssl       Self-signed certificate"
+    echo ""
+    echo "Examples:"
+    echo "  v-add-ssl example.com"
+    echo "  v-add-ssl example.com ssl"
+    exit 1
+}
+
+#------------------------------------------------------------------------------
+# Create SSL certificate
+#------------------------------------------------------------------------------
+
+create_ssl() {
+    local domain=$1
+    local ssl_type=$2
+
+    log_info "Tao SSL certificate ($ssl_type)..."
+
+    local cert_dir="$WWW_DIR/$domain/ssl"
+    mkdir -p "$cert_dir"
+
+    if [[ "$ssl_type" == "letssl" ]]; then
+        if command -v certbot &>/dev/null; then
+            log_info "Su dung Let's Encrypt..."
+
+            # Ensure domain is accessible
+            certbot certonly --webroot \
+                --webroot-path "$WWW_DIR/$domain/public_html" \
+                --domain "$domain" \
+                --domain "www.$domain" \
+                --email "admin@$domain" \
+                --agree-tos \
+                --noninteractive 2>/dev/null || {
+                log_warn "Let's Encrypt that bai, chuyen sang self-signed"
+                ssl_type="ssl"
+            }
+        else
+            log_warn "Certbot khong co san"
+            ssl_type="ssl"
+        fi
+    fi
+
+    if [[ "$ssl_type" == "ssl" ]] || [[ ! -f "$cert_dir/fullchain.pem" ]]; then
+        log_info "Tao self-signed certificate..."
+        OPENSSL_CONF=/etc/ssl/openssl.cnf \
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$cert_dir/privkey.pem" \
+            -out "$cert_dir/fullchain.pem" \
+            -subj "/C=VN/ST=HCM/L=HCM/O=SPanel/CN=$domain"
+        log_info "Da tao self-signed certificate"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Update nginx config
+#------------------------------------------------------------------------------
+
+update_vhost() {
+    local domain=$1
+
+    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+
+    if [[ ! -f "$conf_file" ]]; then
+        log_error "Config khong ton tai: $conf_file"
+        return 1
+    fi
+
+    log_info "Cap nhat nginx config..."
+
+    # Backup original
+    cp "$conf_file" "$conf_file.bak"
+
+    # Create new config with SSL
+    cat > "$conf_file" << EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $domain www.$domain;
+
+    root $WWW_DIR/$domain/public_html;
+    index index.html index.htm index.php;
+
+    access_log $WWW_DIR/$domain/logs/access.log;
+    error_log $WWW_DIR/$domain/logs/error.log;
+
+    ssl_certificate $WWW_DIR/$domain/ssl/fullchain.pem;
+    ssl_certificate_key $WWW_DIR/$domain/ssl/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+
+    location ~ \.php\$ {
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}
+EOF
+
+    chmod 644 "$conf_file"
+}
+
+#------------------------------------------------------------------------------
+# Enable domain
+#------------------------------------------------------------------------------
+
+enable_domain() {
+    local domain=$1
+
+    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+    local enabled_link="$NGINX_CONF/sites-enabled/$domain.conf"
+
+    if [[ -L "$enabled_link" ]]; then
+        rm -f "$enabled_link"
+    fi
+
+    ln -sf "$conf_file" "$enabled_link"
+
+    # Test and reload nginx
+    if /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
+        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
+        log_info "Da enable SSL cho $domain"
+    else
+        log_error "Nginx config loi"
+        return 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Add SSL
+#------------------------------------------------------------------------------
+
+add_ssl() {
+    local domain=$1
+    local ssl_type=${2:-letssl}
+
+    if [[ -z "$domain" ]]; then
+        usage
+    fi
+
+    # Check domain exists
+    if [[ ! -d "$WWW_DIR/$domain" ]]; then
+        log_error "Domain '$domain' khong ton tai"
+        return 1
+    fi
+
+    # Check if SSL already exists
+    if [[ -f "$WWW_DIR/$domain/ssl/fullchain.pem" ]]; then
+        log_warn "SSL da ton tai cho '$domain'"
+        printf "Nhap 'yes' de ghi de: "
+        read -r confirm
+        if [[ "$confirm" != "yes" ]]; then
+            echo "Da huy."
+            return 1
+        fi
+    fi
+
+    print_header
+    echo ""
+    echo "Domain: $domain"
+    echo "Type: $ssl_type"
+    echo ""
+
+    # Create SSL
+    create_ssl "$domain" "$ssl_type"
+
+    # Update nginx config
+    update_vhost "$domain"
+
+    # Enable domain
+    enable_domain "$domain"
+
+    echo ""
+    log_info "Da them SSL cho $domain thanh cong!"
+    echo ""
+    echo "  SSL Dir: $WWW_DIR/$domain/ssl"
+    echo "  Cert: $WWW_DIR/$domain/ssl/fullchain.pem"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# MAIN
+#------------------------------------------------------------------------------
+
+main() {
+    check_root
+
+    local domain=""
+    local ssl_type="letssl"
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                usage
+                ;;
+            letssl|ssl)
+                ssl_type="$1"
+                ;;
+            *)
+                domain="$1"
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$domain" ]]; then
+        usage
+    fi
+
+    add_ssl "$domain" "$ssl_type"
+}
+
+main "$@"

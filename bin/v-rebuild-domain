@@ -1,0 +1,218 @@
+#!/bin/bash
+#==============================================================================
+# v-rebuild-domain
+# Dua domain ve trang thai mac dinh
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+WWW_DIR="/var/www"
+NGINX_CONF="$SPANEL_DIR/nginx/conf"
+
+#------------------------------------------------------------------------------
+# Check root
+#------------------------------------------------------------------------------
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       SPanel - Rebuild Domain          ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+}
+
+#------------------------------------------------------------------------------
+# Usage
+#------------------------------------------------------------------------------
+
+usage() {
+    echo ""
+    echo "Usage: v-rebuild-domain <domain> [options]"
+    echo ""
+    echo "Options:"
+    echo "  --keep-logs    Giu lai logs cu"
+    echo "  --list         Danh sach domain co the rebuild"
+    echo ""
+    echo "Examples:"
+    echo "  v-rebuild-domain example.com"
+    echo "  v-rebuild-domain example.com --keep-logs"
+    exit 1
+}
+
+#------------------------------------------------------------------------------
+# List domains
+#------------------------------------------------------------------------------
+
+list_domains() {
+    echo ""
+    echo -e "${BLUE}── Domains ──${NC}"
+    echo ""
+
+    local count=0
+
+    if [[ -d "$WWW_DIR" ]]; then
+        for domain_dir in "$WWW_DIR"/*; do
+            [[ -d "$domain_dir" ]] || continue
+            local domain=$(basename "$domain_dir")
+            [[ "$domain" == "default" ]] && continue
+            ((count++))
+            printf "  ${CYAN}%-25s${NC}\n" "$domain"
+        done
+    fi
+
+    echo ""
+    echo "Total: $count domains"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Rebuild domain
+#------------------------------------------------------------------------------
+
+rebuild_domain() {
+    local domain=$1
+    local keep_logs=$2
+
+    if [[ -z "$domain" ]]; then
+        log_error "Vui long nhap domain"
+        return 1
+    fi
+
+    local domain_dir="$WWW_DIR/$domain"
+
+    if [[ ! -d "$domain_dir" ]]; then
+        log_error "Domain '$domain' khong ton tai"
+        return 1
+    fi
+
+    # Check if nginx config exists
+    if [[ ! -f "$NGINX_CONF/sites-available/$domain.conf" ]]; then
+        log_error "Nginx config cho '$domain' khong ton tai"
+        return 1
+    fi
+
+    print_header
+    echo ""
+    echo "Domain: $domain"
+    echo ""
+
+    # Backup logs if not keeping
+    local logs_backup=""
+    if [[ "$keep_logs" != "yes" ]] && [[ -d "$domain_dir/logs" ]]; then
+        local backup_dir="/var/backups"
+        mkdir -p "$backup_dir"
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        logs_backup="$backup_dir/logs_${domain}_${timestamp}.tar.gz"
+        tar -czf "$logs_backup" -C "$WWW_DIR" "$domain/logs" 2>/dev/null
+        log_info "Backup logs: $logs_backup"
+    fi
+
+    # Clear public_html content (keep directory)
+    log_info "Xoa noi dung public_html cu..."
+    rm -rf "$domain_dir/public_html"/*
+
+    # Clear logs content (keep directory)
+    if [[ "$keep_logs" != "yes" ]]; then
+        rm -rf "$domain_dir/logs"/*
+    fi
+
+    # Create default index.html
+    log_info "Tao index.html mac dinh..."
+    cat > "$domain_dir/public_html/index.html" << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
+        h1 { color: #333; }
+        .info { color: #666; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Welcome to your website!</h1>
+    <p class="info">This is the default page.</p>
+    <p class="info">Domain: DOMAIN_PLACEHOLDER</p>
+</body>
+</html>
+EOF
+
+    # Replace placeholder with actual domain
+    sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" "$domain_dir/public_html/index.html"
+
+    # Reload nginx
+    log_info "Reload nginx..."
+    /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null && \
+        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
+
+    echo ""
+    log_info "Da rebuild domain $domain thanh cong!"
+    echo ""
+    echo "  Root: $domain_dir/public_html"
+    echo "  Config: $NGINX_CONF/sites-available/$domain.conf"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# MAIN
+#------------------------------------------------------------------------------
+
+main() {
+    check_root
+
+    if [[ $# -eq 0 ]]; then
+        usage
+    fi
+
+    # Parse arguments
+    local domain=""
+    local keep_logs="no"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --keep-logs)
+                keep_logs="yes"
+                shift
+                ;;
+            --list)
+                list_domains
+                exit 0
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                domain="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$domain" ]]; then
+        usage
+    fi
+
+    rebuild_domain "$domain" "$keep_logs"
+}
+
+main "$@"
