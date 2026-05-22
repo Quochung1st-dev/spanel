@@ -61,6 +61,7 @@ confirm_uninstall() {
     echo ""
     echo "Script này sẽ gỡ:"
     echo "  - OpenResty/Nginx"
+    echo "  - Redis"
     echo "  - Lua scripts"
     echo "  - WAF"
     echo "  - CrowdSec"
@@ -97,14 +98,18 @@ main() {
 
     # Chạy lần lượt các script gỡ (theo thứ tự ngược lại với install)
     # 1. SSL trước (cần remove configs)
-    # 2. CrowdSec
-    # 3. WAF
-    # 4. User & Group (cần xóa user trước khi xóa dir)
-    # 5. Lua scripts
-    # 6. Directory (xóa /var/www nếu có --clear)
-    # 7. OpenResty cuối (cần stop nginx trước)
+    # 2. Redis
+    # 3. CrowdSec
+    # 4. WAF
+    # 5. User & Group (cần xóa user trước khi xóa dir)
+    # 6. Lua scripts
+    # 7. Directory (xóa /var/www nếu có --clear)
+    # 8. OpenResty cuối (cần stop nginx trước)
     log_section "Gỡ SSL"
     bash "$SCRIPT_DIR/uninstall/ssl.sh"
+
+    log_section "Gỡ Redis"
+    bash "$SCRIPT_DIR/uninstall/redis.sh"
 
     log_section "Gỡ CrowdSec"
     bash "$SCRIPT_DIR/uninstall/crowdsec.sh"

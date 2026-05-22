@@ -194,13 +194,15 @@ main() {
 
     # Cài đặt theo thứ tự
     # 1. OpenResty (nginx + LuaJIT) trước vì bao gồm cả hai
-    # 2. Cấu hình nginx (nginx.conf, sites-available, conf.d)
-    # 3. Lua scripts (copy vào /var/server/lua)
-    # 4. WAF rules
-    # 5. CrowdSec (protection layer trên WAF)
-    # 6. SSL certificates
-    # 7. User & Group (tạo cuối để tránh lỗi phân quyền)
+    # 2. Redis (session/cache backend)
+    # 3. Cấu hình nginx (nginx.conf, sites-available, conf.d)
+    # 4. Lua scripts (copy vào /var/server/lua)
+    # 5. WAF rules
+    # 6. CrowdSec (protection layer trên WAF)
+    # 7. SSL certificates
+    # 8. User & Group (tạo cuối để tránh lỗi phân quyền)
     run_install_script "openresty.sh" "OpenResty (Nginx + LuaJIT)"
+    run_install_script "redis.sh" "Redis"
     run_install_script "nginx.sh" "Nginx Config"
     run_install_script "lua.sh" "Lua Scripts"
     run_install_script "waf.sh" "WAF"
