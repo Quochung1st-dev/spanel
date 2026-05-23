@@ -1,0 +1,593 @@
+#!/bin/bash
+#==============================================================================
+# v-sync-config
+# Quan ly cau hinh SSH sync
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+CONFIG_DIR="$SPANEL_DIR/sync"
+
+#------------------------------------------------------------------------------
+# Check root
+#------------------------------------------------------------------------------
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║       SPanel - SSH Sync Config          ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+}
+
+#------------------------------------------------------------------------------
+# Usage
+#------------------------------------------------------------------------------
+
+usage() {
+    echo ""
+    echo "Usage: v-sync-config <action> [options]"
+    echo ""
+    echo "Actions:"
+    echo "  add         Them server moi"
+    echo "  edit        Chinh sua server"
+    echo "  list        Danh sach server"
+    echo "  delete      Xoa server"
+    echo "  test        Test ket noi SSH"
+    echo ""
+    echo "Options:"
+    echo "  --name      Ten server"
+    echo "  --id        Chon server theo so thu tu"
+    echo ""
+    echo "Examples:"
+    echo "  v-sync-config add"
+    echo "  v-sync-config list"
+    echo "  v-sync-config test"
+    echo "  v-sync-config test --id 1"
+    echo "  v-sync-config delete --id 2"
+    exit 1
+}
+
+#------------------------------------------------------------------------------
+# Create config directory
+#------------------------------------------------------------------------------
+
+init_config() {
+    mkdir -p "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
+}
+
+#------------------------------------------------------------------------------
+# Get all servers as array
+#------------------------------------------------------------------------------
+
+get_servers_array() {
+    local servers=()
+    local i=1
+
+    for conf in "$CONFIG_DIR"/*.conf; do
+        [[ -f "$conf" ]] || continue
+        source "$conf"
+        # Include all fields for storage, but only use first 5 for list display
+        local entry="$SYNC_NAME|$SYNC_HOST|$SYNC_PORT|$SYNC_USER|$SYNC_METHOD|$SYNC_PASSWORD|$SYNC_KEY_FILE"
+        servers+=("$entry")
+    done
+
+    echo "${servers[@]}"
+}
+
+#------------------------------------------------------------------------------
+# List servers with numbers
+#------------------------------------------------------------------------------
+
+list_servers() {
+    echo ""
+    echo -e "${CYAN}Danh sach server:${NC}"
+    echo ""
+
+    local servers=$(get_servers_array)
+
+    if [[ -z "$servers" ]]; then
+        log_warn "Chua co server nao"
+        echo ""
+        echo "Su dung: v-sync-config add"
+        echo ""
+        return
+    fi
+
+    local i=1
+    echo "  #  | Name             | Host                  | Port | User              | Method"
+    echo "-----|------------------|----------------------|------|-------------------|--------"
+
+    for server in $servers; do
+        IFS='|' read -r name host port user method _ <<< "$server"
+        printf "%4d | %-16s | %-20s | %-4s | %-17s | %s\n" "$i" "$name" "$host" "$port" "$user" "$method"
+        ((i++))
+    done
+
+    echo ""
+    echo "Chon so thu tu de thao tac."
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Get server config by number
+#------------------------------------------------------------------------------
+
+get_server_by_number() {
+    local num=$1
+    local servers=$(get_servers_array)
+    local i=1
+
+    for server in $servers; do
+        if [[ $i -eq $num ]]; then
+            IFS='|' read -r SYNC_NAME SYNC_HOST SYNC_PORT SYNC_USER SYNC_METHOD SYNC_PASSWORD SYNC_KEY_FILE <<< "$server"
+            return 0
+        fi
+        ((i++))
+    done
+
+    return 1
+}
+
+#------------------------------------------------------------------------------
+# Get server config by name
+#------------------------------------------------------------------------------
+
+get_server_config() {
+    local name=$1
+
+    local conf_file="$CONFIG_DIR/$name.conf"
+    if [[ -f "$conf_file" ]]; then
+        source "$conf_file"
+        return 0
+    fi
+    return 1
+}
+
+#------------------------------------------------------------------------------
+# Get server count
+#------------------------------------------------------------------------------
+
+get_server_count() {
+    local count=0
+    for conf in "$CONFIG_DIR"/*.conf; do
+        [[ -f "$conf" ]] && ((count++))
+    done
+    echo $count
+}
+
+#------------------------------------------------------------------------------
+# Add server
+#------------------------------------------------------------------------------
+
+add_server() {
+    echo ""
+    echo -e "${CYAN}Them server moi:${NC}"
+    echo ""
+
+    local name=""
+    local host=""
+    local port="22"
+    local user=""
+    local method="password"
+    local password=""
+    local key_file=""
+
+    printf "Ten server: "
+    read -r name
+
+    if [[ -z "$name" ]]; then
+        log_error "Ten server khong duoc trong"
+        return 1
+    fi
+
+    if [[ -f "$CONFIG_DIR/$name.conf" ]]; then
+        log_error "Server '$name' da ton tai"
+        return 1
+    fi
+
+    printf "Host/IP: "
+    read -r host
+
+    if [[ -z "$host" ]]; then
+        log_error "Host khong duoc trong"
+        return 1
+    fi
+
+    printf "Port [22]: "
+    read -r port
+    port=${port:-22}
+
+    printf "User: "
+    read -r user
+
+    if [[ -z "$user" ]]; then
+        log_error "User khong duoc trong"
+        return 1
+    fi
+
+    echo ""
+    echo "Phuong thuc xac thuc:"
+    echo "  1. Password"
+    echo "  2. SSH Key"
+    printf "Chon [1]: "
+    read -r method_choice
+
+    if [[ "$method_choice" =~ ^[2]$ ]]; then
+            method="key"
+            printf "Duong dan SSH Key: "
+            read -r key_file
+
+            if [[ -z "$key_file" ]]; then
+                log_error "Duong dan key khong duoc trong"
+                return 1
+            fi
+
+            if [[ ! -f "$key_file" ]]; then
+                log_error "File key khong ton tai: $key_file"
+                return 1
+            fi
+            password=""
+        else
+            method="password"
+            key_file=""
+            printf "Password: "
+            read -rs password
+            echo ""
+            # Base64 encode password
+            password=$(echo -n "$password" | base64)
+        fi
+
+    cat > "$CONFIG_DIR/$name.conf" << EOF
+SYNC_NAME="$name"
+SYNC_HOST="$host"
+SYNC_PORT="$port"
+SYNC_USER="$user"
+SYNC_METHOD="$method"
+SYNC_PASSWORD="$password"
+SYNC_KEY_FILE="$key_file"
+EOF
+
+    chmod 600 "$CONFIG_DIR/$name.conf"
+
+    echo ""
+    log_info "Da them server '$name' thanh cong!"
+    echo ""
+    echo "  Name: $name"
+    echo "  Host: $host"
+    echo "  Port: $port"
+    echo "  User: $user"
+    echo "  Method: $method"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Edit server
+#------------------------------------------------------------------------------
+
+edit_server() {
+    local input=$1
+
+    # Check if input is number
+    if [[ "$input" =~ ^[0-9]+$ ]]; then
+        if ! get_server_by_number "$input"; then
+            log_error "Server #$input khong ton tai"
+            return 1
+        fi
+    else
+        if ! get_server_config "$input"; then
+            log_error "Server '$input' khong ton tai"
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo -e "${CYAN}Chinh sua server '$SYNC_NAME':${NC}"
+    echo ""
+
+    echo "Hien tai:"
+    echo "  Host: $SYNC_HOST"
+    echo "  Port: $SYNC_PORT"
+    echo "  User: $SYNC_USER"
+    echo "  Method: $SYNC_METHOD"
+    echo ""
+
+    local new_host="$SYNC_HOST"
+    local new_port="$SYNC_PORT"
+    local new_user="$SYNC_USER"
+    local new_method="$SYNC_METHOD"
+    local new_password="$SYNC_PASSWORD"
+    local new_key_file="$SYNC_KEY_FILE"
+
+    printf "Host [$SYNC_HOST]: "
+    read -r input
+    [[ -n "$input" ]] && new_host="$input"
+
+    printf "Port [$SYNC_PORT]: "
+    read -r input
+    [[ -n "$input" ]] && new_port="$input"
+
+    printf "User [$SYNC_USER]: "
+    read -r input
+    [[ -n "$input" ]] && new_user="$input"
+
+    echo ""
+    echo "Phuong thuc xac thuc:"
+    echo "  1. Password"
+    echo "  2. SSH Key"
+    printf "Chon [$SYNC_METHOD]: "
+    read -r method_choice
+
+    case "$method_choice" in
+        2)
+            new_method="key"
+            printf "Duong dan SSH Key: "
+            read -r input
+            [[ -n "$input" ]] && new_key_file="$input"
+            new_password=""
+            ;;
+        *)
+            new_method="password"
+            new_key_file=""
+            printf "Password moi (de trong neu khong doi): "
+            read -rs input
+            echo ""
+            if [[ -n "$input" ]]; then
+                new_password=$(echo -n "$input" | base64)
+            fi
+            ;;
+    esac
+
+    cat > "$CONFIG_DIR/$SYNC_NAME.conf" << EOF
+SYNC_NAME="$SYNC_NAME"
+SYNC_HOST="$new_host"
+SYNC_PORT="$new_port"
+SYNC_USER="$new_user"
+SYNC_METHOD="$new_method"
+SYNC_PASSWORD="$new_password"
+SYNC_KEY_FILE="$new_key_file"
+EOF
+
+    chmod 600 "$CONFIG_DIR/$SYNC_NAME.conf"
+
+    echo ""
+    log_info "Da cap nhat server '$SYNC_NAME' thanh cong!"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Delete server
+#------------------------------------------------------------------------------
+
+delete_server() {
+    local input=$1
+
+    # Check if input is number
+    if [[ "$input" =~ ^[0-9]+$ ]]; then
+        if ! get_server_by_number "$input"; then
+            log_error "Server #$input khong ton tai"
+            return 1
+        fi
+    else
+        if ! get_server_config "$input"; then
+            log_error "Server '$input' khong ton tai"
+            return 1
+        fi
+    fi
+
+    echo ""
+    printf "Ban co chan muon xoa server '$SYNC_NAME'? [y/N]: "
+    read -r confirm
+
+    if [[ "$confirm" != "y" ]]; then
+        echo "Da huy."
+        return 0
+    fi
+
+    rm -f "$CONFIG_DIR/$SYNC_NAME.conf"
+    log_info "Da xoa server '$SYNC_NAME'"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Test SSH connection
+#------------------------------------------------------------------------------
+
+test_connection() {
+    local input=$1
+
+    # Check if input is number
+    if [[ "$input" =~ ^[0-9]+$ ]]; then
+        if ! get_server_by_number "$input"; then
+            log_error "Server #$input khong ton tai"
+            return 1
+        fi
+    else
+        if ! get_server_config "$input"; then
+            log_error "Server '$input' khong ton tai"
+            return 1
+        fi
+    fi
+
+    echo ""
+    log_info "Dang test ket noi toi $SYNC_HOST:$SYNC_PORT..."
+    echo ""
+
+    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+
+    if [[ "$SYNC_METHOD" == "key" ]]; then
+        ssh_opts="$ssh_opts -i $SYNC_KEY_FILE"
+    elif [[ -n "$SYNC_PASSWORD" ]]; then
+        # Decode password
+        local pass=$(echo "$SYNC_PASSWORD" | base64 -d 2>/dev/null || echo "")
+        sshpass -p "$pass" ssh $ssh_opts -p "$SYNC_PORT" "$SYNC_USER@$SYNC_HOST" "echo 'OK'" 2>/dev/null && {
+            echo ""
+            log_info "Ket noi thanh cong!"
+            return
+        }
+        # Fallback: try with expect-like approach
+        ssh $ssh_opts -p "$SYNC_PORT" "$SYNC_USER@$SYNC_HOST" "echo 'OK'" 2>/dev/null && {
+            echo ""
+            log_info "Ket noi thanh cong!"
+            return
+        }
+        echo ""
+        log_error "Ket noi that bai"
+        return 1
+    fi
+
+    ssh $ssh_opts -p "$SYNC_PORT" "$SYNC_USER@$SYNC_HOST" "echo 'OK'" 2>/dev/null && {
+        echo ""
+        log_info "Ket noi thanh cong!"
+    } || {
+        echo ""
+        log_error "Ket noi that bai"
+        return 1
+    }
+}
+
+#------------------------------------------------------------------------------
+# Interactive select server
+#------------------------------------------------------------------------------
+
+interactive_select() {
+    local action=$1
+    local count=$(get_server_count)
+
+    if [[ $count -eq 0 ]]; then
+        log_warn "Chua co server nao"
+        echo ""
+        echo "Su dung: v-sync-config add"
+        echo ""
+        return 1
+    fi
+
+    list_servers
+
+    printf "Nhap so thu tu: "
+    read -r num
+
+    if [[ -z "$num" ]] || [[ ! "$num" =~ ^[0-9]+$ ]]; then
+        log_error "Vui long nhap so"
+        return 1
+    fi
+
+    if [[ $num -lt 1 ]] || [[ $num -gt $count ]]; then
+        log_error "So thu tu khong hop le (1-$count)"
+        return 1
+    fi
+
+    case "$action" in
+        edit)
+            edit_server "$num"
+            ;;
+        delete)
+            delete_server "$num"
+            ;;
+        test)
+            test_connection "$num"
+            ;;
+    esac
+}
+
+#------------------------------------------------------------------------------
+# MAIN
+#------------------------------------------------------------------------------
+
+main() {
+    check_root
+    init_config
+
+    local action=""
+    local server_name=""
+    local server_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            add|list|delete|edit|test)
+                action="$1"
+                ;;
+            --name)
+                server_name="$2"
+                shift
+                ;;
+            --id)
+                server_id="$2"
+                shift
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                log_error "Tuy chon khong hop le: $1"
+                usage
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$action" ]]; then
+        usage
+    fi
+
+    print_header
+
+    case "$action" in
+        add)
+            add_server
+            ;;
+        list)
+            list_servers
+            ;;
+        edit)
+            if [[ -n "$server_id" ]]; then
+                edit_server "$server_id"
+            elif [[ -n "$server_name" ]]; then
+                edit_server "$server_name"
+            else
+                interactive_select "edit"
+            fi
+            ;;
+        delete)
+            if [[ -n "$server_id" ]]; then
+                delete_server "$server_id"
+            elif [[ -n "$server_name" ]]; then
+                delete_server "$server_name"
+            else
+                interactive_select "delete"
+            fi
+            ;;
+        test)
+            if [[ -n "$server_id" ]]; then
+                test_connection "$server_id"
+            elif [[ -n "$server_name" ]]; then
+                test_connection "$server_name"
+            else
+                interactive_select "test"
+            fi
+            ;;
+    esac
+}
+
+main "$@"

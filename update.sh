@@ -52,17 +52,26 @@ update_bin_scripts() {
 
     if [[ -d "$SCRIPT_DIR/bin" ]]; then
         mkdir -p "$SPANEL_DIR/bin"
-        cp -rf "$SCRIPT_DIR/bin/"* "$SPANEL_DIR/bin/"
+
+        # Copy only regular files, skip symlinks
+        for file in "$SCRIPT_DIR/bin"/*; do
+            if [[ -f "$file" ]] && [[ ! -L "$file" ]]; then
+                cp -f "$file" "$SPANEL_DIR/bin/"
+                chmod +x "$file" 2>/dev/null || true
+            fi
+        done
+
         chmod +x "$SPANEL_DIR/bin/"v-* 2>/dev/null || true
         log_info "Đã cập nhật bin scripts"
     else
         log_warn "Không tìm thấy $SCRIPT_DIR/bin"
     fi
 
-    local bin_links="v-check-vps v-list-domain v-add-domain v-delete-domain v-add-ssl v-backup-domain v-restore-domain v-rebuild-domain"
-    for bin in $bin_links; do
-        if [[ -f "$SPANEL_DIR/bin/$bin" ]]; then
-            ln -sf "$SPANEL_DIR/bin/$bin" "/usr/local/bin/$bin"
+    # Create symlinks for all v-* scripts
+    for bin in "$SPANEL_DIR/bin"/v-*; do
+        if [[ -f "$bin" ]] && [[ ! -L "$bin" ]]; then
+            local name=$(basename "$bin")
+            ln -sf "$bin" "/usr/local/bin/$name"
         fi
     done
     log_info "Đã cập nhật symlinks"
@@ -77,7 +86,14 @@ update_data() {
 
     if [[ -d "$SCRIPT_DIR/data/nginx" ]]; then
         mkdir -p "$SPANEL_DIR/nginx/conf"
-        cp -rf "$SCRIPT_DIR/data/nginx/"* "$SPANEL_DIR/nginx/conf/"
+
+        # Copy nginx configs (skip symlinks)
+        for file in "$SCRIPT_DIR/data/nginx"/*; do
+            if [[ -f "$file" ]] && [[ ! -L "$file" ]]; then
+                cp -f "$file" "$SPANEL_DIR/nginx/conf/"
+            fi
+        done
+
         log_info "Đã cập nhật nginx configs"
 
         # Create sites-enabled symlinks
@@ -93,13 +109,21 @@ update_data() {
 
     if [[ -d "$SCRIPT_DIR/data/lua" ]]; then
         mkdir -p "$SPANEL_DIR/lua"
-        cp -rf "$SCRIPT_DIR/data/lua/"* "$SPANEL_DIR/lua/"
+        for file in "$SCRIPT_DIR/data/lua"/*; do
+            if [[ -f "$file" ]] && [[ ! -L "$file" ]]; then
+                cp -f "$file" "$SPANEL_DIR/lua/"
+            fi
+        done
         log_info "Đã cập nhật lua scripts"
     fi
 
     if [[ -d "$SCRIPT_DIR/data/waf" ]]; then
         mkdir -p "$SPANEL_DIR/waf"
-        cp -rf "$SCRIPT_DIR/data/waf/"* "$SPANEL_DIR/waf/"
+        for file in "$SCRIPT_DIR/data/waf"/*; do
+            if [[ -f "$file" ]] && [[ ! -L "$file" ]]; then
+                cp -f "$file" "$SPANEL_DIR/waf/"
+            fi
+        done
         log_info "Đã cập nhật waf rules"
     fi
 
