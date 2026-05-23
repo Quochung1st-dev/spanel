@@ -189,6 +189,39 @@ Proxy cache config:
 - Static files: 30 ngày
 - Bypass cache: Cookie `nocache=1`
 
+## VHost Templates
+
+SPanel cung cấp các template có sẵn cho nhiều loại website:
+
+```bash
+# Static website
+v-add-domain example.com --template static
+
+# PHP website
+v-add-domain example.com --template php
+
+# SSL/PHP website
+v-add-domain example.com --template ssl
+
+# Proxy với cache
+v-add-domain example.com --template proxy --upstream https://example.com
+
+# WordPress
+v-add-domain example.com --template wordpress
+
+# Node.js app
+v-add-domain example.com --template node --node-port 3000
+```
+
+Templates nằm tại `data/vhost/template/`:
+- `static.conf` - Static HTML/CSS/JS
+- `php.conf` - PHP website
+- `ssl.conf` - HTTPS với SSL
+- `proxy.conf` - Reverse proxy với caching
+- `node.conf` - Node.js/React app
+- `wordpress.conf` - WordPress optimized
+- `lua.conf` - Lua access phase (include snippet)
+
 ## Logging
 
 Logs được lưu tại:
