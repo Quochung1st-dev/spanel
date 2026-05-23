@@ -116,36 +116,47 @@ server {
     server_name SERVER_DOMAIN SERVER_WWW;
     return 301 https://$host$request_uri;
 }
+
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name SERVER_DOMAIN SERVER_WWW;
+
     root WWW_DIR/public_html;
     index index.html index.htm index.php;
-    access_log WWW_DIR/logs/access.log;
-    error_log WWW_DIR/logs/error.log;
+
     ssl_certificate WWW_DIR/ssl/fullchain.pem;
     ssl_certificate_key WWW_DIR/ssl/privkey.pem;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
-    ssl_prefer_server_ciphers off;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    access_log WWW_DIR/logs/access.log;
+    error_log WWW_DIR/logs/error.log;
+
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
+    add_header X-SSL-Protocol $ssl_protocol always;
+
     location / {
         try_files $uri $uri/ =404;
     }
+
     location ~ \.php$ {
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
+
     location ~ /\. {
         deny all;
     }
 }
 EOF
 
-        # Replace placeholders
         sed -i "s|SERVER_DOMAIN|$domain|g" "$conf_file"
         sed -i "s|SERVER_WWW|www.$domain|g" "$conf_file"
         sed -i "s|WWW_DIR|$WWW_DIR/$domain|g" "$conf_file"
@@ -157,25 +168,29 @@ server {
     server_name SERVER_DOMAIN SERVER_WWW;
     root WWW_DIR/public_html;
     index index.html index.htm index.php;
+
     access_log WWW_DIR/logs/access.log;
     error_log WWW_DIR/logs/error.log;
+
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
+
     location / {
         try_files $uri $uri/ =404;
     }
+
     location ~ \.php$ {
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
+
     location ~ /\. {
         deny all;
     }
 }
 EOF
 
-        # Replace placeholders
         sed -i "s|SERVER_DOMAIN|$domain|g" "$conf_file"
         sed -i "s|SERVER_WWW|www.$domain|g" "$conf_file"
         sed -i "s|WWW_DIR|$WWW_DIR/$domain|g" "$conf_file"
@@ -216,12 +231,28 @@ create_ssl() {
     fi
 
     if [[ "$ssl_type" == "selfsigned" ]] || [[ ! -f "$cert_dir/fullchain.pem" ]]; then
-        OPENSSL_CONF=/etc/ssl/openssl.cnf \
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        OPENSSL_CONF=/usr/lib/ssl/openssl.cnf \
+        /usr/bin/openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
             -keyout "$cert_dir/privkey.pem" \
             -out "$cert_dir/fullchain.pem" \
             -subj "/C=VN/ST=HCM/L=HCM/O=SPanel/CN=$domain"
         log_info "Da tao self-signed certificate"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Reload nginx
+#------------------------------------------------------------------------------
+
+reload_nginx() {
+    if /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
+        pkill nginx 2>/dev/null || true
+        sleep 1
+        /usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf
+        log_info "Da reload nginx"
+    else
+        log_error "Nginx config loi"
+        return 1
     fi
 }
 
@@ -249,15 +280,8 @@ enable_domain() {
 
     ln -sf "$conf_file" "$enabled_link"
 
-    # Test nginx
-    if /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
-        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
-        log_info "Da enable $domain"
-    else
-        log_error "Nginx config loi"
-        rm -f "$enabled_link"
-        return 1
-    fi
+    # Test and reload nginx
+    reload_nginx
 }
 
 #------------------------------------------------------------------------------
@@ -325,6 +349,11 @@ add_domain() {
     echo ""
     log_info "Da tao domain $domain thanh cong!"
     echo ""
+    if [[ "$enable_ssl" == "yes" ]]; then
+        echo "  SSL: $WWW_DIR/$domain/ssl"
+        echo "  Cert: $WWW_DIR/$domain/ssl/fullchain.pem"
+        echo ""
+    fi
 }
 
 #------------------------------------------------------------------------------

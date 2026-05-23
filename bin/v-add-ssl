@@ -74,7 +74,6 @@ create_ssl() {
         if command -v certbot &>/dev/null; then
             log_info "Su dung Let's Encrypt..."
 
-            # Ensure domain is accessible
             certbot certonly --webroot \
                 --webroot-path "$WWW_DIR/$domain/public_html" \
                 --domain "$domain" \
@@ -93,8 +92,8 @@ create_ssl() {
 
     if [[ "$ssl_type" == "ssl" ]] || [[ ! -f "$cert_dir/fullchain.pem" ]]; then
         log_info "Tao self-signed certificate..."
-        OPENSSL_CONF=/etc/ssl/openssl.cnf \
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        OPENSSL_CONF=/usr/lib/ssl/openssl.cnf \
+        /usr/bin/openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
             -keyout "$cert_dir/privkey.pem" \
             -out "$cert_dir/fullchain.pem" \
             -subj "/C=VN/ST=HCM/L=HCM/O=SPanel/CN=$domain"
@@ -103,7 +102,7 @@ create_ssl() {
 }
 
 #------------------------------------------------------------------------------
-# Update nginx config
+# Update nginx config with SSL
 #------------------------------------------------------------------------------
 
 update_vhost() {
@@ -131,25 +130,28 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name $domain www.$domain;
 
     root $WWW_DIR/$domain/public_html;
     index index.html index.htm index.php;
 
+    ssl_certificate $WWW_DIR/$domain/ssl/fullchain.pem;
+    ssl_certificate_key $WWW_DIR/$domain/ssl/privkey.pem;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
     access_log $WWW_DIR/$domain/logs/access.log;
     error_log $WWW_DIR/$domain/logs/error.log;
 
-    ssl_certificate $WWW_DIR/$domain/ssl/fullchain.pem;
-    ssl_certificate_key $WWW_DIR/$domain/ssl/privkey.pem;
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
-    ssl_prefer_server_ciphers off;
-
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
+    add_header X-SSL-Protocol \$ssl_protocol always;
 
     location / {
         try_files \$uri \$uri/ =404;
@@ -171,25 +173,15 @@ EOF
 }
 
 #------------------------------------------------------------------------------
-# Enable domain
+# Reload nginx
 #------------------------------------------------------------------------------
 
-enable_domain() {
-    local domain=$1
-
-    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
-    local enabled_link="$NGINX_CONF/sites-enabled/$domain.conf"
-
-    if [[ -L "$enabled_link" ]]; then
-        rm -f "$enabled_link"
-    fi
-
-    ln -sf "$conf_file" "$enabled_link"
-
-    # Test and reload nginx
+reload_nginx() {
     if /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
-        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
-        log_info "Da enable SSL cho $domain"
+        pkill nginx 2>/dev/null || true
+        sleep 1
+        /usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf
+        log_info "Da reload nginx"
     else
         log_error "Nginx config loi"
         return 1
@@ -214,17 +206,6 @@ add_ssl() {
         return 1
     fi
 
-    # Check if SSL already exists
-    if [[ -f "$WWW_DIR/$domain/ssl/fullchain.pem" ]]; then
-        log_warn "SSL da ton tai cho '$domain'"
-        printf "Nhap 'yes' de ghi de: "
-        read -r confirm
-        if [[ "$confirm" != "yes" ]]; then
-            echo "Da huy."
-            return 1
-        fi
-    fi
-
     print_header
     echo ""
     echo "Domain: $domain"
@@ -237,14 +218,15 @@ add_ssl() {
     # Update nginx config
     update_vhost "$domain"
 
-    # Enable domain
-    enable_domain "$domain"
+    # Reload nginx
+    reload_nginx
 
     echo ""
     log_info "Da them SSL cho $domain thanh cong!"
     echo ""
     echo "  SSL Dir: $WWW_DIR/$domain/ssl"
     echo "  Cert: $WWW_DIR/$domain/ssl/fullchain.pem"
+    echo "  Key: $WWW_DIR/$domain/ssl/privkey.pem"
     echo ""
 }
 
