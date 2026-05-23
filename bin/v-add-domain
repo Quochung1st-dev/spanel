@@ -51,11 +51,12 @@ usage() {
     echo "Options:"
     echo "  --ssl           Kich hoat SSL (self-signed)"
     echo "  --letsencrypt   Kich hoat SSL (Let's Encrypt)"
+    echo "  --proxy URL     Proxy den URL (VD: https://example.com)"
     echo ""
     echo "Examples:"
     echo "  v-add-domain example.com"
     echo "  v-add-domain example.com --ssl"
-    echo "  v-add-domain example.com --ssl --enable"
+    echo "  v-add-domain example.com --ssl --proxy https://target.com"
     exit 1
 }
 
@@ -201,6 +202,99 @@ EOF
 }
 
 #------------------------------------------------------------------------------
+# Create proxy nginx config
+#------------------------------------------------------------------------------
+
+create_proxy_vhost() {
+    local domain=$1
+    local target_url=$2
+
+    log_info "Tao proxy nginx config..."
+
+    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+
+    # Extract host from URL
+    local target_host=$(echo "$target_url" | sed -e 's|https://||' -e 's|http://||' -e 's|/.*||')
+
+    cat > "$conf_file" << EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    return 301 $target_url\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name $domain www.$domain;
+
+    ssl_certificate $WWW_DIR/$domain/ssl/fullchain.pem;
+    ssl_certificate_key $WWW_DIR/$domain/ssl/privkey.pem;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Enable cache
+    proxy_cache spanel_cache;
+    proxy_cache_valid 200 5m;
+    proxy_cache_valid 404 1m;
+    proxy_cache_key "\$scheme\$host\$request_uri";
+    add_header X-Cache-Status \$upstream_cache_status always;
+    proxy_no_cache \$skip_cache;
+    proxy_cache_bypass \$skip_cache;
+
+    # Force cache ignoring origin headers
+    proxy_ignore_headers Cache-Control Expires Set-Cookie X-Accel-Expires;
+
+    # Buffer settings
+    proxy_buffering on;
+    proxy_buffer_size 4k;
+    proxy_buffers 24 4k;
+    proxy_busy_buffers_size 8k;
+
+    # Proxy to target
+    location / {
+        proxy_pass $target_url;
+        proxy_ssl_server_name on;
+        proxy_set_header Host $target_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 30s;
+        proxy_cache_valid 200 5m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_min_uses 1;
+    }
+
+    # Static files cache longer
+    location ~* \\.(jpg|jpeg|png|gif|ico|css|js|woff|woff2|ttf|svg|eot|otf)\$ {
+        proxy_pass $target_url;
+        proxy_ssl_server_name on;
+        proxy_set_header Host $target_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_cache_valid 200 30m;
+        proxy_cache_use_stale error timeout updating invalid_header;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    access_log $WWW_DIR/$domain/logs/access.log;
+    error_log $WWW_DIR/$domain/logs/error.log;
+}
+EOF
+
+    chmod 644 "$conf_file"
+    log_info "Da tao proxy config"
+}
+
+#------------------------------------------------------------------------------
 # Create SSL certificate
 #------------------------------------------------------------------------------
 
@@ -292,6 +386,7 @@ add_domain() {
     local domain=$1
     local enable_ssl="no"
     local ssl_type="selfsigned"
+    local proxy_url=""
 
     # Parse arguments
     shift
@@ -304,6 +399,11 @@ add_domain() {
             --letsencrypt)
                 enable_ssl="yes"
                 ssl_type="letsencrypt"
+                ;;
+            --proxy)
+                proxy_url="$2"
+                enable_ssl="yes"
+                shift
                 ;;
             *)
                 ;;
@@ -332,6 +432,9 @@ add_domain() {
     echo ""
     echo "Domain: $domain"
     echo "SSL: $enable_ssl"
+    if [[ -n "$proxy_url" ]]; then
+        echo "Proxy: $proxy_url"
+    fi
     echo ""
 
     # Create
@@ -341,7 +444,11 @@ add_domain() {
         create_ssl "$domain" "$ssl_type"
     fi
 
-    create_vhost "$domain" "$enable_ssl"
+    if [[ -n "$proxy_url" ]]; then
+        create_proxy_vhost "$domain" "$proxy_url"
+    else
+        create_vhost "$domain" "$enable_ssl"
+    fi
 
     # Always enable domain
     enable_domain "$domain"
@@ -352,8 +459,12 @@ add_domain() {
     if [[ "$enable_ssl" == "yes" ]]; then
         echo "  SSL: $WWW_DIR/$domain/ssl"
         echo "  Cert: $WWW_DIR/$domain/ssl/fullchain.pem"
-        echo ""
     fi
+    if [[ -n "$proxy_url" ]]; then
+        echo "  Proxy: $proxy_url"
+        echo "  Cache: enabled"
+    fi
+    echo ""
 }
 
 #------------------------------------------------------------------------------
