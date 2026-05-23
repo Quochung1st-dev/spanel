@@ -8,7 +8,6 @@ local var = ngx.var
 local log = ngx.log
 local ERR = ngx.ERR
 local WARN = ngx.WARN
-local WARN = ngx.WARN
 
 local ngx_shared = ngx.shared
 local spanel_shm = ngx_shared.spanel_shm
@@ -30,7 +29,7 @@ end
 local function waf_check()
     local config = get_config()
     if config.waf_enabled ~= "true" then
-        return true
+        return true, nil
     end
 
     local waf = require "waf"
@@ -41,6 +40,23 @@ local function waf_check()
         var.waf_matched_rule = result.rule or ""
         var.waf_matched_var = result.var or ""
 
+        -- Log to WAF log file
+        local log_msg = string.format(
+            "[%s] %s | %s | %s | %s\n",
+            ngx.localtime(),
+            var.remote_addr,
+            result.rule or "unknown",
+            result.reason or "unknown",
+            var.request_uri or ""
+        )
+
+        -- Write to log file
+        local log_file = io.open("/var/server/logs/waf/blocked.log", "a")
+        if log_file then
+            log_file:write(log_msg)
+            log_file:close()
+        end
+
         log(ERR, "[WAF] Blocked: ", var.remote_addr, " - ", result.reason)
 
         if config.waf_mode == "active" then
@@ -48,19 +64,23 @@ local function waf_check()
         end
     end
 
-    return true
+    return true, nil
 end
 
 -- Rate limit check
 local function rate_limit_check()
     local config = get_config()
     if config.rate_limit ~= "true" then
-        return true
+        return true, nil
     end
 
     local key = "rate_limit:" .. var.remote_addr
     local limit = config.rate_limit_req
     local window = config.rate_limit_window
+
+    if not spanel_shm then
+        return true, nil
+    end
 
     local current = spanel_shm:get(key)
     if current and current >= limit then
@@ -73,43 +93,39 @@ local function rate_limit_check()
         spanel_shm:set(key, 1, window)
     end
 
-    return true
-end
-
--- IP whitelist check
-local function is_ip_whitelisted()
-    local ip = var.remote_addr
-    local whitelist = spanel_shm:get("whitelist:" .. ip)
-    return whitelist == true
+    return true, nil
 end
 
 -- MAIN access logic
-local config = get_config()
+local function main()
+    local config = get_config()
 
--- Skip cho internal requests
-if var.server_addr == var.remote_addr then
-    return
-end
-
--- Check IP whitelist
-if is_ip_whitelisted() then
-    return
-end
-
--- WAF check
-local waf_ok, waf_reason = waf_check()
-if not waf_ok then
-    if config.waf_mode == "active" then
-        ngx.exit(ngx.HTTP_FORBIDDEN)
+    -- Skip for internal requests
+    if var.server_addr == var.remote_addr then
         return
     end
+
+    -- WAF check
+    local waf_ok, waf_reason = waf_check()
+    if not waf_ok then
+        if config.waf_mode == "active" then
+            ngx.status = ngx.HTTP_FORBIDDEN
+            ngx.say("403 Forbidden - WAF Blocked")
+            ngx.exit(ngx.HTTP_FORBIDDEN)
+            return
+        end
+    end
+
+    -- Rate limit check
+    local rl_ok, rl_reason = rate_limit_check()
+    if not rl_ok then
+        ngx.status = ngx.HTTP_TOO_MANY_REQUESTS
+        ngx.say("429 Too Many Requests")
+        ngx.exit(ngx.HTTP_TOO_MANY_REQUESTS)
+        return
+    end
+
+    log(WARN, "[SPanel] Access: ", var.remote_addr, " ", var.request_uri)
 end
 
--- Rate limit check
-local rl_ok, rl_reason = rate_limit_check()
-if not rl_ok then
-    ngx.exit(ngx.HTTP_TOO_MANY_REQUESTS)
-    return
-end
-
-log(WARN, "[SPanel] Access allowed: ", var.remote_addr, " ", var.request_uri)
+main()

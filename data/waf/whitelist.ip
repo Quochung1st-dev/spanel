@@ -1,0 +1,12 @@
+# Whitelist IPs - one per line
+# Lines starting with # are comments
+# Empty lines are ignored
+
+# Localhost
+127.0.0.1
+::1
+
+# Internal networks
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16

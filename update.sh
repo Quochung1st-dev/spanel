@@ -119,12 +119,14 @@ update_data() {
 
     if [[ -d "$SCRIPT_DIR/data/waf" ]]; then
         mkdir -p "$SPANEL_DIR/waf"
-        for file in "$SCRIPT_DIR/data/waf"/*; do
-            if [[ -f "$file" ]] && [[ ! -L "$file" ]]; then
-                cp -f "$file" "$SPANEL_DIR/waf/"
-            fi
+        # Copy all files including subdirectories
+        find "$SCRIPT_DIR/data/waf" -type f | while read file; do
+            local rel_path="${file#$SCRIPT_DIR/data/waf/}"
+            local target_dir="$SPANEL_DIR/waf/$(dirname "$rel_path")"
+            mkdir -p "$target_dir"
+            cp -f "$file" "$target_dir/"
         done
-        log_info "Đã cập nhật waf rules"
+        log_info "Đã cập nhật waf rules và IP lists"
     fi
 
     if [[ -f "$SCRIPT_DIR/.env" ]] && [[ ! -f "$SPANEL_DIR/.env" ]]; then

@@ -1,0 +1,20 @@
+# SPanel OpenResty Service
+# Uses custom nginx.conf at /var/server/nginx/conf/nginx.conf
+
+[Unit]
+Description=SPanel OpenResty Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/var/server/run/nginx.pid
+ExecStartPre=/usr/local/openresty/nginx/sbin/nginx -t -c /var/server/nginx/conf/nginx.conf
+ExecStart=/usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf
+ExecReload=/usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf -s reload
+ExecStop=/usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf -s quit
+TimeoutStopSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

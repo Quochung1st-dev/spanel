@@ -5,14 +5,21 @@
 
 local waf = {}
 
--- Cấu hình
+-- Config
 local config = {
-    rules_dir = "/opt/spanel/var/server/waf/rules"
+    rules_dir = "/var/server/waf/rules",
+    whitelist_file = "/var/server/waf/whitelist.ip",
+    blocklist_file = "/var/server/waf/blocklist.ip"
 }
 
 -- Shared dict
 local ngx_shared = ngx.shared
 local waf_shm = ngx_shared and ngx_shared.waf_shm
+
+-- Cached lists
+local whitelist_ips = {}
+local blocklist_ips = {}
+local list_loaded = false
 
 -- Request data helpers
 local function get_var(name)
@@ -24,19 +31,82 @@ local function get_args()
 end
 
 local function get_post()
-    -- Đọc body để kiểm tra POST data
     ngx.req.read_body()
     local data = ngx.req.get_body_data()
     return data or ""
 end
 
-local function get_headers()
-    local headers = {}
-    local keys = ngx.req.get_headers()
-    for k, v in pairs(keys) do
-        headers[k] = v
+-- Load IPs from file
+local function load_ip_list(file)
+    local ips = {}
+    local f = io.open(file, "r")
+    if not f then
+        return ips
     end
-    return headers
+
+    for line in f:lines() do
+        -- Skip comments and empty lines
+        line = line:gsub("%s+#.*", "") -- Remove comments
+        line = line:gsub("^%s+", "") -- Trim leading
+        line = line:gsub("%s+$", "") -- Trim trailing
+
+        if line ~= "" and line ~= "#" then
+            -- Convert CIDR to simple check (simplified)
+            local ip = line:gsub("/%d+$", "") -- Remove /24 etc for now
+            table.insert(ips, ip)
+        end
+    end
+
+    f:close()
+    return ips
+end
+
+-- Reload lists periodically
+local function ensure_lists_loaded()
+    if not list_loaded then
+        whitelist_ips = load_ip_list(config.whitelist_file)
+        blocklist_ips = load_ip_list(config.blocklist_file)
+        list_loaded = true
+
+        -- Reload every 60 seconds
+        local ok, err = ngx.timer.at(60, function()
+            list_loaded = false
+        end)
+    end
+end
+
+-- Check if IP is in whitelist
+local function is_ip_whitelisted(ip)
+    ensure_lists_loaded()
+
+    for _, whitelist_ip in ipairs(whitelist_ips) do
+        if ip == whitelist_ip then
+            return true
+        end
+    end
+
+    -- Also check shared dict
+    if waf_shm then
+        local whitelist = waf_shm:get("whitelist:" .. ip)
+        if whitelist == true then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- Check if IP is in blocklist
+local function is_ip_blocklisted(ip)
+    ensure_lists_loaded()
+
+    for _, blocklist_ip in ipairs(blocklist_ips) do
+        if ip == blocklist_ip then
+            return true
+        end
+    done
+
+    return false
 end
 
 -- Kiểm tra IP có bị block không
@@ -47,7 +117,7 @@ local function is_ip_blocked(ip)
 
     local blocked = waf_shm:get("blocked:" .. ip)
     if blocked then
-        local now = ngx.now() * 1000  -- Convert to milliseconds
+        local now = ngx.now() * 1000
         if blocked > now then
             return true
         else
@@ -64,7 +134,7 @@ local function block_ip(ip, duration)
         return
     end
 
-    duration = duration or 3600000  -- Default 1 hour in ms
+    duration = duration or 3600000
     local expire = ngx.now() * 1000 + duration
     waf_shm:set("blocked:" .. ip, expire)
 end
@@ -78,7 +148,6 @@ local function load_rules(file)
     end
 
     for line in f:lines() do
-        -- Skip comments and empty lines
         if line ~= "" and not line:match("^%s*#") then
             table.insert(rules, line)
         end
@@ -88,7 +157,7 @@ local function load_rules(file)
     return rules
 end
 
--- Match against pattern (simple patterns)
+-- Match against pattern
 local function pattern_match(str, pattern)
     if not str or not pattern then
         return false
@@ -96,8 +165,6 @@ local function pattern_match(str, pattern)
 
     -- SQL injection patterns
     if pattern:match("^sql:") then
-        local pat = pattern:sub(5)
-        -- Various SQL injection patterns
         local sql_patterns = {
             "union%s+select",
             "union%s+all%s+select",
@@ -111,7 +178,6 @@ local function pattern_match(str, pattern)
             "benchmark%s*%(",
             "sleep%s*%(",
             "'%s*or%s*'1'%s*=%s*'1",
-            "'%s*or%s*1%s*=%s*1",
             "'%s*or%s*1%s*=%s*1",
             "or%s+1%s*=%s*1",
             "'%s*--",
@@ -181,8 +247,23 @@ function waf.check()
         var = nil
     }
 
-    -- Check nếu IP đã bị block
     local ip = get_var("remote_addr")
+
+    -- Check whitelist first
+    if is_ip_whitelisted(ip) then
+        return result -- Allow
+    end
+
+    -- Check blocklist
+    if is_ip_blocklisted(ip) then
+        result.pass = false
+        result.reason = "IP is blocklisted"
+        result.rule = "ip_blocklist"
+        result.var = ip
+        return result
+    end
+
+    -- Check if IP is blocked (temporary block)
     if is_ip_blocked(ip) then
         result.pass = false
         result.reason = "IP is blocked"
@@ -191,13 +272,10 @@ function waf.check()
         return result
     end
 
-    -- Check URI
+    -- Check URI, args, body
     local uri = get_var("request_uri")
     local args = get_args()
     local post = get_post()
-    local headers = get_headers()
-
-    -- Combine all data to check
     local data_to_check = uri .. " " .. args .. " " .. post
 
     -- Check SQL injection
@@ -207,7 +285,7 @@ function waf.check()
         result.reason = sql_reason
         result.rule = "sql_injection"
         result.var = "request_uri/args/body"
-        block_ip(ip, 3600000)  -- Block 1 hour
+        block_ip(ip, 3600000)
         return result
     end
 
@@ -233,18 +311,16 @@ function waf.check()
         return result
     end
 
-    -- Check User-Agent
-    local ua = get_var("http_user_agent") or ""
-    if ua:match("curl") and uri:match("^/nginx_status") then
-        -- Allow nginx_status for monitoring
-    end
-
     return result
 end
 
 -- Export functions
+waf.is_ip_whitelisted = is_ip_whitelisted
+waf.is_ip_blocklisted = is_ip_blocklisted
 waf.is_ip_blocked = is_ip_blocked
 waf.block_ip = block_ip
 waf.pattern_match = pattern_match
+waf.load_ip_list = load_ip_list
+waf.reload_lists = function() list_loaded = false end
 
 return waf

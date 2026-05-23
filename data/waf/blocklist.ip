@@ -1,0 +1,8 @@
+# Blocklist IPs - one per line
+# Lines starting with # are comments
+# Empty lines are ignored
+# Format: IP or CIDR notation
+
+# Example blocked IPs
+# 192.168.1.100
+# 10.0.0.50/32

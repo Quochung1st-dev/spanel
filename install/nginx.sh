@@ -60,6 +60,15 @@ install_nginx_config() {
     # Copy mime.types
     cp "$SCRIPT_DIR/data/nginx/mime.types" $nginx_conf_dir/mime.types
 
+    # Tạo thư mục run
+    mkdir -p "$SPANEL_DIR/run"
+
+    # Copy systemd service file
+    if [[ -f "$SCRIPT_DIR/install/spanel-nginx.service" ]]; then
+        cp "$SCRIPT_DIR/install/spanel-nginx.service" /etc/systemd/system/spanel-nginx.service
+        systemctl daemon-reload
+    fi
+
     # Copy các block config trong conf.d
     if [[ -d "$SCRIPT_DIR/data/nginx/conf.d" ]]; then
         cp -r "$SCRIPT_DIR/data/nginx/conf.d/"* $nginx_conf_dir/conf.d/
