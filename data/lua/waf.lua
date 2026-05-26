@@ -104,7 +104,7 @@ local function is_ip_blocklisted(ip)
         if ip == blocklist_ip then
             return true
         end
-    done
+    end
 
     return false
 end
