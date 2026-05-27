@@ -17,7 +17,6 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
 BACKUP_DIR="/var/backups"
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Check root

@@ -18,7 +18,6 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
 NGINX_CONF="$SPANEL_DIR/nginx/conf"
 BACKUP_DIR="/var/backups"
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Check root
@@ -147,7 +146,7 @@ restore_domain() {
     fi
 
     # Reload nginx
-    bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
+    v-restart reload-only 2>/dev/null || true
 
     echo ""
     log_info "Khoi phuc thanh cong!"

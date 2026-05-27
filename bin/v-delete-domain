@@ -18,7 +18,6 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 BACKUP_DIR="/var/backups"
 WWW_DIR="/var/www"
 NGINX_CONF="$SPANEL_DIR/nginx/conf"
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Print header
@@ -137,7 +136,7 @@ disable_domain() {
     fi
 
     # Reload nginx bang v-restart
-    bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
+    v-restart reload-only 2>/dev/null || true
 }
 
 #------------------------------------------------------------------------------

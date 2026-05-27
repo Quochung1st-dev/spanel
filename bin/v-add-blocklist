@@ -16,7 +16,6 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Load env
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 BLOCKLIST_FILE="$SPANEL_DIR/waf/blocklist.conf"
 NGINX_CONF="$SPANEL_DIR/nginx/conf/nginx.conf"
@@ -97,7 +96,7 @@ add_blocklist() {
     # Reload nginx bang v-restart
     log_info "Dang reload Nginx..."
     if pgrep nginx > /dev/null 2>&1; then
-        bash "$SCRIPT_DIR/v-restart" reload-only 2>/dev/null && log_info "Nginx da reload" || log_warn "Loi reload Nginx"
+        v-restart reload-only 2>/dev/null && log_info "Nginx da reload" || log_warn "Loi reload Nginx"
     else
         log_warn "Nginx khong chay, khong can reload"
     fi

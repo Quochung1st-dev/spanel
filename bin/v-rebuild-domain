@@ -17,7 +17,6 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
 NGINX_CONF="$SPANEL_DIR/nginx/conf"
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Check root
@@ -163,7 +162,7 @@ EOF
 
     # Reload nginx
     log_info "Reload nginx..."
-    bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
+    v-restart reload-only 2>/dev/null || true
 
     echo ""
     log_info "Da rebuild domain $domain thanh cong!"

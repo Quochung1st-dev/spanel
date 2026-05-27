@@ -19,7 +19,6 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 NGINX_CONF_DIR="$SPANEL_DIR/nginx"
 WWW_DIR="/var/www"
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Change domain document root
@@ -48,7 +47,7 @@ change_document_root() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        bash "$BIN_DIR/v-restart" reload-only
+        v-restart reload-only
 
     log_info "Đã đổi document root"
 }
@@ -75,7 +74,7 @@ change_port() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        bash "$BIN_DIR/v-restart" reload-only
+        v-restart reload-only
 
     log_info "Đã đổi port"
 }
@@ -120,11 +119,11 @@ server {
     listen 443 ssl http2;
     server_name $domain;
 
-    root $SCRIPT_DIR/var/www/$domain/public_html;
+    root /var/www/$domain/public_html;
     index index.php index.html index.htm;
 
-    access_log $SCRIPT_DIR/var/www/$domain/logs/nginx/access.log;
-    error_log $SCRIPT_DIR/var/www/$domain/logs/nginx/error.log;
+    access_log /var/www/$domain/logs/access.log;
+    error_log /var/www/$domain/logs/error.log;
 
     ssl_certificate $cert_dir/fullchain.pem;
     ssl_certificate_key $cert_dir/privkey.pem;
@@ -153,7 +152,7 @@ EOF
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        bash "$BIN_DIR/v-restart" reload-only
+        v-restart reload-only
 
     log_info "Đã cập nhật SSL"
 }
@@ -182,7 +181,7 @@ change_php() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        bash "$BIN_DIR/v-restart" reload-only
+        v-restart reload-only
 
     log_info "Đã đổi PHP version"
 }
@@ -208,7 +207,7 @@ change_cache() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        bash "$BIN_DIR/v-restart" reload-only
+        v-restart reload-only
 
     log_info "Đã cập nhật cache"
 }
@@ -234,7 +233,7 @@ change_waf() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        bash "$BIN_DIR/v-restart" reload-only
+        v-restart reload-only
 
     log_info "Đã cập nhật WAF mode"
 }

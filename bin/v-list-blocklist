@@ -16,7 +16,6 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Load env
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 BLOCKLIST_FILE="$SPANEL_DIR/waf/blocklist.conf"
 
