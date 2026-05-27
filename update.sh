@@ -17,6 +17,12 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load .env từ SCRIPT_DIR nếu có
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 

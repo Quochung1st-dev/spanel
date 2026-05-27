@@ -15,17 +15,15 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Load .env nếu có (chứa SPANEL_DIR và các config)
-if [[ -f .env ]]; then
-    source .env
-fi
-
 # Xác định SCRIPT_DIR (thư mục clone git về - source gốc)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# SPANEL_DIR từ .env hoặc mặc định
-# Trong prod: /var/server (đã set trong .env)
-# Trong dev: có thể = SCRIPT_DIR nếu chạy tại chỗ
+# Load .env từ SCRIPT_DIR (chứa SPANEL_DIR và các config)
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
+# SPANEL_DIR và OPENRESTY_DIR từ .env hoặc mặc định
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 
@@ -80,10 +78,10 @@ run_install_script() {
 
     log_info "Cài đặt $name..."
 
-    if [[ -f install/$script ]]; then
-        chmod +x install/$script
+    if [[ -f "$SCRIPT_DIR/install/$script" ]]; then
+        chmod +x "$SCRIPT_DIR/install/$script"
         pushd "$SCRIPT_DIR" > /dev/null
-        bash install/$script
+        bash "install/$script"
         popd > /dev/null
         log_info "Đã cài đặt $name"
     else
@@ -98,8 +96,8 @@ run_install_script() {
 install_systemd_service() {
     log_info "Cài đặt systemd service..."
 
-    if [[ -f install/spanel.service ]]; then
-        cp install/spanel.service /etc/systemd/system/
+    if [[ -f "$SCRIPT_DIR/install/spanel.service" ]]; then
+        cp "$SCRIPT_DIR/install/spanel.service" /etc/systemd/system/
         systemctl daemon-reload
         log_info "Đã cài đặt systemd service"
     else
@@ -114,8 +112,8 @@ install_systemd_service() {
 install_logrotate() {
     log_info "Cài đặt logrotate..."
 
-    if [[ -f install/logrotate.conf ]]; then
-        cp install/logrotate.conf /etc/logrotate.d/spanel
+    if [[ -f "$SCRIPT_DIR/install/logrotate.conf" ]]; then
+        cp "$SCRIPT_DIR/install/logrotate.conf" /etc/logrotate.d/spanel
         log_info "Đã cài đặt logrotate"
     else
         log_warn "Không tìm thấy install/logrotate.conf"
@@ -130,21 +128,21 @@ install_bin_scripts() {
     log_info "Cài đặt bin scripts..."
 
     # Copy các scripts vào $SPANEL_DIR/bin
-    mkdir -p $SPANEL_DIR/bin
+    mkdir -p "$SPANEL_DIR/bin"
 
-    if [[ -d $SCRIPT_DIR/bin ]]; then
-        cp -r $SCRIPT_DIR/bin/* $SPANEL_DIR/bin/
-        chmod +x $SPANEL_DIR/bin/v-*
+    if [[ -d "$SCRIPT_DIR/bin" ]]; then
+        cp -r "$SCRIPT_DIR/bin/"* "$SPANEL_DIR/bin/"
+        chmod +x "$SPANEL_DIR/bin"/v-*
         log_info "Đã copy bin scripts vào $SPANEL_DIR/bin"
     fi
 
     # Tạo symlink vào /usr/local/bin để có thể gọi trực tiếp
-    if [[ ! -L /usr/local/bin/v-check-vps ]] && [[ -f $SPANEL_DIR/bin/v-check-vps ]]; then
-        ln -sf $SPANEL_DIR/bin/v-check-vps /usr/local/bin/v-check-vps
-        ln -sf $SPANEL_DIR/bin/v-manager-domain /usr/local/bin/v-manager-domain
-        ln -sf $SPANEL_DIR/bin/v-add-domain /usr/local/bin/v-add-domain
-        ln -sf $SPANEL_DIR/bin/v-change-domain /usr/local/bin/v-change-domain
-        ln -sf $SPANEL_DIR/bin/v-delete-domain /usr/local/bin/v-delete-domain
+    if [[ ! -L /usr/local/bin/v-check-vps ]] && [[ -f "$SPANEL_DIR/bin/v-check-vps" ]]; then
+        ln -sf "$SPANEL_DIR/bin/v-check-vps" /usr/local/bin/v-check-vps
+        ln -sf "$SPANEL_DIR/bin/v-manager-domain" /usr/local/bin/v-manager-domain
+        ln -sf "$SPANEL_DIR/bin/v-add-domain" /usr/local/bin/v-add-domain
+        ln -sf "$SPANEL_DIR/bin/v-change-domain" /usr/local/bin/v-change-domain
+        ln -sf "$SPANEL_DIR/bin/v-delete-domain" /usr/local/bin/v-delete-domain
         log_info "Đã tạo symlinks trong /usr/local/bin"
     fi
 }

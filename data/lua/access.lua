@@ -17,10 +17,10 @@ local waf_shm = ngx_shared.waf_shm
 local function get_config()
     local env = os.getenv
     return {
-        waf_enabled = env("WAF_ENABLED") or "true",
+        waf_enabled = env("WAF_ENABLED") or "false",
         waf_mode = env("WAF_MODE") or "active",
         rate_limit = env("RATE_LIMIT_ENABLED") or "true",
-        rate_limit_req = tonumber(env("RATE_LIMIT_REQUESTS") or "100"),
+        rate_limit_req = tonumber(env("RATE_LIMIT_REQUESTS") or "10000"),
         rate_limit_window = tonumber(env("RATE_LIMIT_WINDOW") or "60")
     }
 end
@@ -105,9 +105,24 @@ local function main()
         return
     end
 
+    -- Skip WAF for WordPress admin paths
+    local wp_admin_paths = {
+        "/wp-admin/",
+        "/wp-login.php",
+        "/wp-admin/admin-ajax.php"
+    }
+    local skip_waf = false
+    local uri = var.request_uri or ""
+    for _, path in ipairs(wp_admin_paths) do
+        if string.find(uri, path, 1, true) then
+            skip_waf = true
+            break
+        end
+    end
+
     -- WAF check
     local waf_ok, waf_reason = waf_check()
-    if not waf_ok then
+    if not waf_ok and not skip_waf then
         if config.waf_mode == "active" then
             ngx.status = ngx.HTTP_FORBIDDEN
             ngx.say("403 Forbidden - WAF Blocked")
