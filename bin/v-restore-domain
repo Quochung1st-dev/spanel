@@ -166,10 +166,11 @@ restore_domain() {
         echo "  Root: $WWW_DIR/$domain/public_html"
 
         # Auto enable
-        local conf_file="$NGINX_CONF/sites-available/$domain.conf"
-        if [[ -f "$conf_file" ]]; then
-            if [[ ! -L "$NGINX_CONF/sites-enabled/$domain.conf" ]]; then
-                ln -sf "$conf_file" "$NGINX_CONF/sites-enabled/$domain.conf"
+        local conf_link="$NGINX_CONF/sites-available/$domain.conf"
+        local conf_target="$WWW_DIR/$domain/config/$domain.conf"
+        if [[ -f "$conf_target" ]] || [[ -e "$conf_target" ]]; then
+            if [[ ! -L "$conf_link" ]]; then
+                ln -sf "$conf_target" "$conf_link"
                 log_info "Da enable domain"
             fi
 

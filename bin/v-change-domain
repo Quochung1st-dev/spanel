@@ -18,6 +18,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 NGINX_CONF_DIR="$SPANEL_DIR/nginx"
+WWW_DIR="/var/www"
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
@@ -30,7 +31,7 @@ change_document_root() {
 
     log_info "Đổi document root của $domain thành $new_root..."
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     if [[ ! -f $conf_file ]]; then
         log_error "Không tìm thấy config của $domain"
@@ -62,7 +63,7 @@ change_port() {
 
     log_info "Đổi port của $domain thành $new_port..."
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     if [[ ! -f $conf_file ]]; then
         log_error "Không tìm thấy config của $domain"
@@ -89,7 +90,7 @@ toggle_ssl() {
 
     log_info "SSL cho $domain: $([[ $enable == true ]] && echo 'bật' || echo 'tắt')"
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
     local cert_dir="$SPANEL_DIR/ssl/$domain"
 
     if [[ ! -f $conf_file ]]; then
@@ -167,7 +168,7 @@ change_php() {
 
     log_info "Đổi PHP version thành $php_version cho $domain..."
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     if [[ ! -f $conf_file ]]; then
         log_error "Không tìm thấy config của $domain"
@@ -196,7 +197,7 @@ change_cache() {
 
     log_info "Cache cho $domain: $([[ $enabled == true ]] && echo 'bật' || echo 'tắt')"
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     if [[ ! -f $conf_file ]]; then
         log_error "Không tìm thấy config của $domain"
@@ -222,7 +223,7 @@ change_waf() {
 
     log_info "WAF mode thành $mode cho $domain..."
 
-    local conf_file="$NGINX_CONF_DIR/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     if [[ ! -f $conf_file ]]; then
         log_error "Không tìm thấy config của $domain"

@@ -18,6 +18,7 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 BACKUP_DIR="/var/backups"
 WWW_DIR="/var/www"
 NGINX_CONF="$SPANEL_DIR/nginx/conf"
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Print header
@@ -78,7 +79,7 @@ list_domains() {
 
     if [[ -d "$NGINX_CONF/sites-available" ]]; then
         for conf in "$NGINX_CONF/sites-available"/*.conf; do
-            [[ -f "$conf" ]] || continue
+            [[ -f "$conf" ]] || [[ -L "$conf" ]] || continue
 
             local domain=$(basename "$conf" .conf)
             [[ "$domain" == "default" ]] && continue
@@ -87,7 +88,7 @@ list_domains() {
             ((count++))
 
             local status="${YELLOW}disabled${NC}"
-            [[ -L "$NGINX_CONF/sites-enabled/$domain.conf" ]] && status="${GREEN}enabled${NC}"
+            [[ -e "$NGINX_CONF/sites-enabled/$domain.conf" ]] && status="${GREEN}enabled${NC}"
 
             printf "  ${CYAN}%-25s${NC} | $status\n" "$domain"
         done
@@ -149,7 +150,7 @@ delete_domain() {
     local no_backup=$3
 
     # Check domain exists
-    if [[ ! -d "$WWW_DIR/$domain" ]] && [[ ! -f "$NGINX_CONF/sites-available/$domain.conf" ]]; then
+    if [[ ! -d "$WWW_DIR/$domain" ]] && [[ ! -L "$NGINX_CONF/sites-available/$domain.conf" ]]; then
         log_error "Domain '$domain' khong ton tai"
         return 1
     fi
@@ -168,7 +169,8 @@ delete_domain() {
     # Disable
     disable_domain "$domain"
 
-    # Delete nginx config
+    # Delete symlink in sites-enabled and sites-available
+    rm -f "$NGINX_CONF/sites-enabled/$domain.conf"
     rm -f "$NGINX_CONF/sites-available/$domain.conf"
     log_info "Da xoa nginx config"
 
@@ -176,12 +178,6 @@ delete_domain() {
     if [[ -d "$WWW_DIR/$domain" ]]; then
         rm -rf "$WWW_DIR/$domain"
         log_info "Da xoa thu muc www"
-    fi
-
-    # Delete SSL (now in www/domain/ssl)
-    if [[ -d "$WWW_DIR/$domain/ssl" ]]; then
-        rm -rf "$WWW_DIR/$domain/ssl"
-        log_info "Da xoa SSL"
     fi
 
     echo ""

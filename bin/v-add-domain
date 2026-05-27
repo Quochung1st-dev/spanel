@@ -17,6 +17,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
 NGINX_CONF="$SPANEL_DIR/nginx/conf"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Print header
@@ -107,7 +108,7 @@ create_vhost() {
 
     log_info "Tao nginx config..."
 
-    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     if [[ "$enable_ssl" == "yes" ]]; then
         cat > "$conf_file" << 'EOF'
@@ -198,6 +199,10 @@ EOF
     fi
 
     chmod 644 "$conf_file"
+
+    # Symlink to sites-available
+    ln -sf "$conf_file" "$NGINX_CONF/sites-available/$domain.conf"
+
     log_info "Da tao config"
 }
 
@@ -211,7 +216,7 @@ create_proxy_vhost() {
 
     log_info "Tao proxy nginx config..."
 
-    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
+    local conf_file="$WWW_DIR/$domain/config/$domain.conf"
 
     # Extract host from URL
     local target_host=$(echo "$target_url" | sed -e 's|https://||' -e 's|http://||' -e 's|/.*||')
@@ -291,6 +296,10 @@ server {
 EOF
 
     chmod 644 "$conf_file"
+
+    # Symlink to sites-available
+    ln -sf "$conf_file" "$NGINX_CONF/sites-available/$domain.conf"
+
     log_info "Da tao proxy config"
 }
 
@@ -339,15 +348,7 @@ create_ssl() {
 #------------------------------------------------------------------------------
 
 reload_nginx() {
-    if /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
-        pkill nginx 2>/dev/null || true
-        sleep 1
-        /usr/local/openresty/nginx/sbin/nginx -c /var/server/nginx/conf/nginx.conf
-        log_info "Da reload nginx"
-    else
-        log_error "Nginx config loi"
-        return 1
-    fi
+    bash "$SCRIPT_DIR/v-restart" reload-only
 }
 
 #------------------------------------------------------------------------------
