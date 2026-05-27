@@ -116,12 +116,27 @@ restore_domain() {
     echo "Backup: $(basename "$backup_file")"
     echo ""
 
-    # Xoa domain cu neu da ton tai
+    # Xac nhan ghi de neu domain da ton tai
     if [[ -d "$WWW_DIR/$domain" ]]; then
-        log_warn "Domain '$domain' da ton tai, dang xoa..."
-        rm -rf "$WWW_DIR/$domain"
-        rm -f "$NGINX_CONF/sites-enabled/$domain.conf"
-        rm -f "$NGINX_CONF/sites-available/$domain.conf"
+        log_warn "Domain '$domain' da ton tai!"
+        echo ""
+        echo "  1. Ghi de (xoa du lieu cu, restore tu backup)"
+        echo "  2. Huy"
+        echo ""
+        printf "  Chon [1-2]: "
+        read -r choice
+        case "$choice" in
+            1)
+                rm -rf "$WWW_DIR/$domain"
+                rm -f "$NGINX_CONF/sites-enabled/$domain.conf"
+                rm -f "$NGINX_CONF/sites-available/$domain.conf"
+                log_info "Da xoa domain cu"
+                ;;
+            *)
+                log_info "Da huy restore"
+                return 0
+                ;;
+        esac
     fi
 
     # Giai nen backup vao thu muc domain
