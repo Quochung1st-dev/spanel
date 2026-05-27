@@ -199,8 +199,8 @@ EOF
 
     chmod 644 "$conf_file"
 
-    # Symlink to sites-available
-    ln -sf "$conf_file" "$NGINX_CONF/sites-available/$domain.conf"
+    # Config se duoc load truc tiep tu /var/www/$domain/config/
+    # Khong can symlink nua vi nginx include /var/www/*/config/*.conf
 
     log_info "Da tao config"
 }
@@ -359,20 +359,8 @@ enable_domain() {
 
     log_info "Enable domain..."
 
-    local conf_file="$NGINX_CONF/sites-available/$domain.conf"
-    local enabled_link="$NGINX_CONF/sites-enabled/$domain.conf"
-
-    if [[ ! -f "$conf_file" ]]; then
-        log_error "Config khong ton tai"
-        return 1
-    fi
-
-    if [[ -L "$enabled_link" ]]; then
-        log_warn "$domain da duoc enable"
-        return 0
-    fi
-
-    ln -sf "$conf_file" "$enabled_link"
+    # Config is in /var/www/$domain/config/$domain.conf
+    # Nginx loads it directly via include /var/www/*/config/*.conf
 
     # Test and reload nginx
     reload_nginx

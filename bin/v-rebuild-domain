@@ -105,7 +105,7 @@ rebuild_domain() {
     fi
 
     # Check if nginx config exists
-    if [[ ! -L "$NGINX_CONF/sites-available/$domain.conf" ]]; then
+    if [[ ! -f "$WWW_DIR/$domain/config/$domain.conf" ]]; then
         log_error "Nginx config cho '$domain' khong ton tai"
         return 1
     fi
@@ -168,7 +168,7 @@ EOF
     log_info "Da rebuild domain $domain thanh cong!"
     echo ""
     echo "  Root: $domain_dir/public_html"
-        echo "  Config: $WWW_DIR/$domain/config/$domain.conf"
+    echo "  Config: $WWW_DIR/$domain/config/$domain.conf"
     echo ""
 }
 

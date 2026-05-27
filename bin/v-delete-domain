@@ -122,24 +122,6 @@ backup_domain() {
 }
 
 #------------------------------------------------------------------------------
-# Disable domain
-#------------------------------------------------------------------------------
-
-disable_domain() {
-    local domain=$1
-
-    local enabled_link="$NGINX_CONF/sites-enabled/$domain.conf"
-
-    if [[ -L "$enabled_link" ]]; then
-        rm -f "$enabled_link"
-        log_info "Da disable $domain"
-    fi
-
-    # Reload nginx bang v-restart
-    v-restart reload-only 2>/dev/null || true
-}
-
-#------------------------------------------------------------------------------
 # Delete domain
 #------------------------------------------------------------------------------
 
@@ -149,7 +131,7 @@ delete_domain() {
     local no_backup=$3
 
     # Check domain exists
-    if [[ ! -d "$WWW_DIR/$domain" ]] && [[ ! -L "$NGINX_CONF/sites-available/$domain.conf" ]]; then
+    if [[ ! -d "$WWW_DIR/$domain" ]]; then
         log_error "Domain '$domain' khong ton tai"
         return 1
     fi
@@ -159,25 +141,16 @@ delete_domain() {
     echo "Domain: $domain"
     echo ""
 
-    # Delete without confirmation (always force)
-    # Backup
+    # Backup before delete
     if [[ "$no_backup" != "yes" ]]; then
         backup_domain "$domain"
     fi
 
-    # Disable
-    disable_domain "$domain"
+    # Delete www directory (nginx config is in /var/www/$domain/config/)
+    rm -rf "$WWW_DIR/$domain"
+    log_info "Da xoa thu muc www"
 
-    # Delete symlink in sites-enabled and sites-available
-    rm -f "$NGINX_CONF/sites-enabled/$domain.conf"
-    rm -f "$NGINX_CONF/sites-available/$domain.conf"
-    log_info "Da xoa nginx config"
-
-    # Delete www directory
-    if [[ -d "$WWW_DIR/$domain" ]]; then
-        rm -rf "$WWW_DIR/$domain"
-        log_info "Da xoa thu muc www"
-    fi
+    v-restart reload-only 2>/dev/null || true
 
     echo ""
     log_info "Da xoa domain $domain thanh cong!"

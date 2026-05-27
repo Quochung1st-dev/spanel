@@ -149,18 +149,7 @@ restore_domain() {
         return 1
     fi
 
-    # Symlink vhost config
-    local conf_target="$WWW_DIR/$domain/config/$domain.conf"
-    if [[ -f "$conf_target" ]]; then
-        log_info "Tao symlink vhost..."
-        ln -sf "$conf_target" "$NGINX_CONF/sites-available/$domain.conf"
-        ln -sf "$NGINX_CONF/sites-available/$domain.conf" "$NGINX_CONF/sites-enabled/$domain.conf"
-        log_info "Da enable domain"
-    else
-        log_warn "Khong tim thay vhost config tai $conf_target"
-    fi
-
-    # Reload nginx
+    # Reload nginx (config from /var/www/$domain/config/ is loaded automatically)
     v-restart reload-only 2>/dev/null || true
 
     echo ""
@@ -168,6 +157,7 @@ restore_domain() {
     echo ""
     echo "  Domain: $domain"
     echo "  Root: $WWW_DIR/$domain/public_html"
+    local conf_target="$WWW_DIR/$domain/config/$domain.conf"
     if [[ -f "$conf_target" ]]; then
         echo "  Config: $conf_target"
     fi
