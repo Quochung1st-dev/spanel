@@ -1,0 +1,110 @@
+#!/bin/bash
+#==============================================================================
+# v-delete-whitelist
+# Xóa IP khỏi whitelist
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Load env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+WHITELIST_FILE="$SPANEL_DIR/waf/whitelist.conf"
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║         SPanel - Delete Whitelist          ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Check root
+#------------------------------------------------------------------------------
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Usage
+#------------------------------------------------------------------------------
+
+usage() {
+    echo "Usage: v-delete-whitelist <IP>"
+    echo ""
+    echo "  IP - Địa chỉ IP cần xóa khỏi whitelist"
+    echo ""
+    echo "Ví dụ:"
+    echo "  v-delete-whitelist 192.168.1.100"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# Delete IP from whitelist
+#------------------------------------------------------------------------------
+
+delete_whitelist() {
+    local ip=$1
+
+    # Check if file exists
+    if [[ ! -f "$WHITELIST_FILE" ]]; then
+        log_error "File whitelist khong ton tai: $WHITELIST_FILE"
+        return 1
+    fi
+
+    # Check if IP exists
+    if ! grep -q "^#\?$ip$" "$WHITELIST_FILE" 2>/dev/null; then
+        log_warn "IP $ip khong ton tai trong whitelist"
+        return 1
+    fi
+
+    # Remove IP and its comments
+    sed -i "/^#.*$ip/d; /^$ip$/d" "$WHITELIST_FILE"
+
+    log_info "Da xoa $ip khoi whitelist"
+    log_info "File: $WHITELIST_FILE"
+
+    # Reload nginx
+    log_info "Dang reload Nginx..."
+    if pgrep nginx > /dev/null 2>&1; then
+        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null && log_info "Nginx da reload" || log_warn "Loi reload Nginx"
+    else
+        log_warn "Nginx khong chay, khong can reload"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Main
+#------------------------------------------------------------------------------
+
+main() {
+    print_header
+    check_root
+
+    if [[ $# -lt 1 ]]; then
+        usage
+        exit 1
+    fi
+
+    delete_whitelist "$1"
+}
+
+main "$@"

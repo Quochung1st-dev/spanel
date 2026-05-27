@@ -1,0 +1,91 @@
+#!/bin/bash
+#==============================================================================
+# v-list-whitelist
+# Liệt kê danh sách whitelist
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Load env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+WHITELIST_FILE="$SPANEL_DIR/waf/whitelist.conf"
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║         SPanel - List Whitelist             ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# List whitelist
+#------------------------------------------------------------------------------
+
+list_whitelist() {
+    echo -e "${YELLOW}Danh sach Whitelist:${NC}"
+    echo ""
+
+    if [[ ! -f "$WHITELIST_FILE" ]]; then
+        log_warn "File whitelist khong ton tai: $WHITELIST_FILE"
+        echo ""
+        echo "Tao file moi..."
+        mkdir -p "$(dirname "$WHITELIST_FILE")"
+        touch "$WHITELIST_FILE"
+        log_info "Da tao file whitelist"
+        return 0
+    fi
+
+    # Check if file is empty
+    if [[ ! -s "$WHITELIST_FILE" ]]; then
+        echo -e "  ${YELLOW}Whitelist trong${NC}"
+        echo ""
+        return 0
+    fi
+
+    # Extract and display IPs with comments
+    local count=0
+    while IFS= read -r line; do
+        # Skip empty lines
+        [[ -z "$line" ]] && continue
+
+        # Comment lines (metadata)
+        if [[ "$line" =~ ^# ]]; then
+            echo -e "  ${BLUE}$line${NC}"
+        # IP lines
+        elif [[ "$line" =~ ^[0-9] || "$line" =~ ^[a-fA-F0-9] ]]; then
+            ((count++))
+            echo -e "  ${GREEN}$count. $line${NC}"
+        fi
+    done < "$WHITELIST_FILE"
+
+    echo ""
+    echo -e "Tong cong: ${GREEN}$count${NC} IPs"
+    echo ""
+    echo "File: $WHITELIST_FILE"
+}
+
+#------------------------------------------------------------------------------
+# Main
+#------------------------------------------------------------------------------
+
+main() {
+    print_header
+    list_whitelist
+}
+
+main "$@"
