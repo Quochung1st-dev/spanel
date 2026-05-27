@@ -18,20 +18,12 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
 BACKUP_DIR="/var/backups"
 
-#------------------------------------------------------------------------------
-# Check root
-#------------------------------------------------------------------------------
-
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         log_error "Can chay voi quyen root"
         exit 1
     fi
 }
-
-#------------------------------------------------------------------------------
-# Print header
-#------------------------------------------------------------------------------
 
 print_header() {
     echo ""
@@ -40,28 +32,14 @@ print_header() {
     echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
 }
 
-#------------------------------------------------------------------------------
-# Usage
-#------------------------------------------------------------------------------
-
 usage() {
     echo ""
-    echo "Usage: v-backup-domain <domain> [options]"
-    echo ""
-    echo "Options:"
-    echo "  --all    Backup tat ca domain"
-    echo "  --list   Danh sach backup hien co"
+    echo "Usage: v-backup-domain <domain>"
     echo ""
     echo "Examples:"
     echo "  v-backup-domain example.com"
-    echo "  v-backup-domain --all"
-    echo "  v-backup-domain --list"
-    exit 1
+    echo ""
 }
-
-#------------------------------------------------------------------------------
-# List backups
-#------------------------------------------------------------------------------
 
 list_backups() {
     echo ""
@@ -87,10 +65,6 @@ list_backups() {
     echo ""
 }
 
-#------------------------------------------------------------------------------
-# Backup single domain
-#------------------------------------------------------------------------------
-
 backup_domain() {
     local domain=$1
 
@@ -109,14 +83,12 @@ backup_domain() {
     echo "Domain: $domain"
     echo ""
 
-    # Create backup dir
     mkdir -p "$BACKUP_DIR"
 
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_DIR/${domain}_${timestamp}.tar.gz"
 
-    # Backup www
-    log_info "Backup www..."
+    log_info "Dang backup..."
     tar -czf "$backup_file" -C "$WWW_DIR" "$domain" 2>/dev/null
 
     if [[ -f "$backup_file" ]]; then
@@ -133,36 +105,6 @@ backup_domain() {
     echo ""
 }
 
-#------------------------------------------------------------------------------
-# Backup all domains
-#------------------------------------------------------------------------------
-
-backup_all() {
-    print_header
-    echo ""
-    echo "Backup tat ca domain..."
-    echo ""
-
-    local count=0
-
-    if [[ -d "$WWW_DIR" ]]; then
-        for domain_dir in "$WWW_DIR"/*; do
-            [[ -d "$domain_dir" ]] || continue
-            local domain=$(basename "$domain_dir")
-            backup_domain "$domain"
-            ((count++))
-        done
-    fi
-
-    echo ""
-    log_info "Da backup $count domains"
-    echo ""
-}
-
-#------------------------------------------------------------------------------
-# MAIN
-#------------------------------------------------------------------------------
-
 main() {
     check_root
 
@@ -170,32 +112,17 @@ main() {
         usage
     fi
 
-    local domain=""
-    local mode="single"
-
-    for arg in "$@"; do
-        case "$arg" in
-            --all)
-                mode="all"
-                ;;
-            --list)
-                list_backups
-                exit 0
-                ;;
-            -h|--help)
-                usage
-                ;;
-            *)
-                domain="$arg"
-                ;;
-        esac
-    done
-
-    if [[ "$mode" == "all" ]]; then
-        backup_all
-    else
-        backup_domain "$domain"
-    fi
+    case "$1" in
+        --list)
+            list_backups
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            backup_domain "$1"
+            ;;
+    esac
 }
 
 main "$@"
