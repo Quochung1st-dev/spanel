@@ -1,0 +1,74 @@
+#!/bin/bash
+#==============================================================================
+# v-backup-domains
+# Backup tat ca domain trong /var/www
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+WWW_DIR="/var/www"
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Can chay voi quyen root"
+        exit 1
+    fi
+}
+
+print_header() {
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║       SPanel - Backup All Domains          ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+main() {
+    check_root
+    print_header
+
+    if [[ ! -d "$WWW_DIR" ]]; then
+        log_error "Thu muc $WWW_DIR khong ton tai"
+        exit 1
+    fi
+
+    local total=0
+    local success=0
+    local failed=0
+
+    for domain_dir in "$WWW_DIR"/*/; do
+        [[ -d "$domain_dir" ]] || continue
+        local domain=$(basename "$domain_dir")
+        [[ "$domain" == "default" ]] && continue
+
+        ((total++))
+        echo -e "${BLUE}── [$total] $domain ──${NC}"
+
+        if v-backup-domain "$domain"; then
+            ((success++))
+        else
+            ((failed++))
+            log_error "Backup $domain that bai"
+        fi
+
+        echo ""
+    done
+
+    echo -e "${CYAN}════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  Total:   ${BLUE}$total${NC}"
+    echo -e "  Success: ${GREEN}$success${NC}"
+    echo -e "  Failed:  ${RED}$failed${NC}"
+    echo ""
+}
+
+main "$@"
