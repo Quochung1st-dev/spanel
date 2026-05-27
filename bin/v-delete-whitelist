@@ -82,10 +82,10 @@ delete_whitelist() {
     log_info "Da xoa $ip khoi whitelist"
     log_info "File: $WHITELIST_FILE"
 
-    # Reload nginx
+    # Reload nginx bang v-restart
     log_info "Dang reload Nginx..."
     if pgrep nginx > /dev/null 2>&1; then
-        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null && log_info "Nginx da reload" || log_warn "Loi reload Nginx"
+        bash "$SCRIPT_DIR/v-restart" reload-only 2>/dev/null && log_info "Nginx da reload" || log_warn "Loi reload Nginx"
     else
         log_warn "Nginx khong chay, khong can reload"
     fi

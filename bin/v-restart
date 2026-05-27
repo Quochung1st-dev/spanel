@@ -100,6 +100,8 @@ start_services() {
         sleep 1
         if pgrep -x nginx > /dev/null 2>&1; then
             log_info "Nginx da khoi dong"
+            # Write PID file
+            pgrep -x nginx | head -1 > "$SPANEL_DIR/run/nginx.pid" 2>/dev/null || true
         else
             log_error "Nginx khong the khoi dong"
         fi
@@ -185,15 +187,16 @@ main() {
     local action="${1:-restart}"
 
     case "$action" in
-        restart|start|stop|status)
+        restart|start|stop|status|reload-only)
             ;;
         *)
-            echo "Usage: v-restart [restart|start|stop|status]"
+            echo "Usage: v-restart [restart|start|stop|status|reload-only]"
             echo ""
-            echo "  restart  - Restart all services (default)"
-            echo "  start    - Start all services"
-            echo "  stop     - Stop all services"
-            echo "  status   - Show service status"
+            echo "  restart     - Restart all services (default)"
+            echo "  start       - Start all services"
+            echo "  stop        - Stop all services"
+            echo "  status      - Show service status"
+            echo "  reload-only - Reload nginx config only"
             exit 1
             ;;
     esac
@@ -202,6 +205,18 @@ main() {
         stop_services
     elif [[ "$action" == "start" ]]; then
         start_services
+    elif [[ "$action" == "reload-only" ]]; then
+        log_info "Reload nginx..."
+        if pgrep -x nginx > /dev/null 2>&1; then
+            # Ensure PID file is valid
+            local pid=$(pgrep -x nginx | head -1)
+            if [[ -n "$pid" ]]; then
+                echo "$pid" > "$SPANEL_DIR/run/nginx.pid" 2>/dev/null || true
+            fi
+            /usr/local/openresty/nginx/sbin/nginx -c "$NGINX_CONF" -s reload 2>/dev/null && log_info "Nginx da reload" || log_error "Loi reload Nginx"
+        else
+            log_error "Nginx khong dang chay"
+        fi
     elif [[ "$action" == "status" ]]; then
         show_status
     else

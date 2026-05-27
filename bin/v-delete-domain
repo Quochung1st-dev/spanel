@@ -135,9 +135,8 @@ disable_domain() {
         log_info "Da disable $domain"
     fi
 
-    # Reload nginx
-    /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null && \
-        /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
+    # Reload nginx bang v-restart
+    bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
 }
 
 #------------------------------------------------------------------------------

@@ -18,6 +18,7 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
 NGINX_CONF="$SPANEL_DIR/nginx/conf"
 BACKUP_DIR="/var/backups"
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Check root
@@ -173,8 +174,7 @@ restore_domain() {
             fi
 
             # Reload nginx
-            /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null && \
-                /usr/local/openresty/nginx/sbin/nginx -s reload 2>/dev/null || true
+            bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
         fi
     else
         log_error "Khoi phuc that bai"

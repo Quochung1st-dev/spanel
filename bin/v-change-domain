@@ -18,8 +18,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 NGINX_CONF_DIR="$SPANEL_DIR/nginx"
-SPANEL_USER="${SPANEL_USER:-spanel}"
-SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Change domain document root
@@ -48,7 +47,7 @@ change_document_root() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        $SPANEL_DIR/nginx/sbin/nginx -s reload
+        bash "$BIN_DIR/v-restart" reload-only
 
     log_info "Đã đổi document root"
 }
@@ -75,7 +74,7 @@ change_port() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        $SPANEL_DIR/nginx/sbin/nginx -s reload
+        bash "$BIN_DIR/v-restart" reload-only
 
     log_info "Đã đổi port"
 }
@@ -153,7 +152,7 @@ EOF
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        $SPANEL_DIR/nginx/sbin/nginx -s reload
+        bash "$BIN_DIR/v-restart" reload-only
 
     log_info "Đã cập nhật SSL"
 }
@@ -182,7 +181,7 @@ change_php() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        $SPANEL_DIR/nginx/sbin/nginx -s reload
+        bash "$BIN_DIR/v-restart" reload-only
 
     log_info "Đã đổi PHP version"
 }
@@ -208,7 +207,7 @@ change_cache() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        $SPANEL_DIR/nginx/sbin/nginx -s reload
+        bash "$BIN_DIR/v-restart" reload-only
 
     log_info "Đã cập nhật cache"
 }
@@ -234,7 +233,7 @@ change_waf() {
 
     # Reload nginx
     $SPANEL_DIR/nginx/sbin/nginx -t 2>/dev/null && \
-        $SPANEL_DIR/nginx/sbin/nginx -s reload
+        bash "$BIN_DIR/v-restart" reload-only
 
     log_info "Đã cập nhật WAF mode"
 }
