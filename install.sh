@@ -157,13 +157,6 @@ finish_installation() {
     # Phân quyền
     chown -R $SPANEL_USER:$SPANEL_GROUP $SPANEL_DIR 2>/dev/null || true
 
-    # Tạo file .env nếu chưa có
-    if [[ ! -f $SPANEL_DIR/.env ]]; then
-        cp $SCRIPT_DIR/.env $SPANEL_DIR/.env
-        chmod 600 $SPANEL_DIR/.env
-        log_warn "Đã tạo $SPANEL_DIR/.env - vui lòng chỉnh sửa"
-    fi
-
     echo ""
     echo "========================================"
     echo -e "${GREEN}SPanel đã được cài đặt thành công!${NC}"
