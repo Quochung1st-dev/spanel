@@ -154,21 +154,84 @@ install_bin_scripts() {
 finish_installation() {
     log_info "Hoàn tất cài đặt..."
 
-    # Phân quyền
-    chown -R $SPANEL_USER:$SPANEL_GROUP $SPANEL_DIR 2>/dev/null || true
+    # Tạo các thư mục cần thiết nếu chưa có
+    log_info "Tạo thư mục runtime..."
+    mkdir -p "$SPANEL_DIR/run"
+    mkdir -p "$SPANEL_DIR/logs/nginx"
+    mkdir -p "$SPANEL_DIR/logs/waf"
+    mkdir -p "$SPANEL_DIR/cache"
+    mkdir -p "$SPANEL_DIR/ssl"
+    mkdir -p "$SPANEL_DIR/lib"
+    mkdir -p "$SPANEL_DIR/bin"
+    mkdir -p "$SPANEL_DIR/backup"
+    mkdir -p /var/www
 
+    # Phân quyền cho SPanel user
+    log_info "Phân quyền thư mục..."
+    chown -R $SPANEL_USER:$SPANEL_GROUP "$SPANEL_DIR" 2>/dev/null || true
+    chown -R $SPANEL_USER:$SPANEL_GROUP /var/www 2>/dev/null || true
+
+    # Tạo file empty cho logs nếu chưa có
+    touch "$SPANEL_DIR/logs/nginx/access.log"
+    touch "$SPANEL_DIR/logs/nginx/error.log"
+    touch "$SPANEL_DIR/logs/waf/audit.log"
+    touch "$SPANEL_DIR/logs/waf/error.log"
+    chown $SPANEL_USER:$SPANEL_GROUP "$SPANEL_DIR/logs"/*.log 2>/dev/null || true
+
+    # Test cấu hình Nginx
+    log_info "Kiểm tra cấu hình Nginx..."
+    if [[ -x "$OPENRESTY_DIR/nginx/sbin/nginx" ]]; then
+        if "$OPENRESTY_DIR/nginx/sbin/nginx" -t 2>/dev/null; then
+            log_info "Nginx config OK"
+        else
+            log_warn "Nginx config có lỗi, kiểm tra lại"
+        fi
+    fi
+
+    # Bật systemd service
+    if [[ -f /etc/systemd/system/spanel.service ]]; then
+        log_info "Bật SPanel service..."
+        systemctl enable spanel 2>/dev/null || true
+    fi
+
+    # Hiển thị thông tin cài đặt
     echo ""
     echo "========================================"
     echo -e "${GREEN}SPanel đã được cài đặt thành công!${NC}"
     echo "========================================"
     echo ""
-    echo "Thư mục cài đặt: $SPANEL_DIR"
+    echo -e "${YELLOW}Thông tin cài đặt:${NC}"
+    echo "  Thư mục runtime : $SPANEL_DIR"
+    echo "  User             : $SPANEL_USER"
+    echo "  Nginx            : $OPENRESTY_DIR/nginx/sbin/nginx"
     echo ""
-    echo "Các bước tiếp theo:"
-    echo "  1. Chỉnh sửa $SPANEL_DIR/.env"
-    echo "  2. Khởi động Nginx: $OPENRESTY_DIR/nginx/sbin/nginx"
-    echo "  3. Kiểm tra VPS: v-check-vps"
-    echo "  4. Quản lý domain: v-manager-domain"
+    echo -e "${YELLOW}Cấu trúc thư mục:${NC}"
+    echo "  $SPANEL_DIR/nginx/     - Cấu hình Nginx"
+    echo "  $SPANEL_DIR/lua/       - Scripts Lua"
+    echo "  $SPANEL_DIR/waf/       - WAF rules"
+    echo "  $SPANEL_DIR/cache/     - Cache"
+    echo "  $SPANEL_DIR/ssl/       - SSL certificates"
+    echo "  $SPANEL_DIR/logs/      - Logs"
+    echo "  $SPANEL_DIR/bin/       - Scripts quản lý"
+    echo "  /var/www/              - Website files"
+    echo ""
+    echo -e "${YELLOW}Các bước tiếp theo:${NC}"
+    echo "  1. Khởi động Nginx:"
+    echo "     $OPENRESTY_DIR/nginx/sbin/nginx"
+    echo ""
+    echo "  2. Kiểm tra hệ thống:"
+    echo "     v-check-vps"
+    echo ""
+    echo "  3. Thêm domain mới:"
+    echo "     v-add-domain example.com"
+    echo ""
+    echo "  4. Quản lý domain:"
+    echo "     v-manager-domain"
+    echo ""
+    echo -e "${YELLOW}Commands có sẵn:${NC}"
+    echo "  v-check-vps, v-manager-domain, v-add-domain,"
+    echo "  v-change-domain, v-delete-domain, v-list-domain,"
+    echo "  v-add-ssl, v-delete-ssl, v-backup-domain, ..."
     echo ""
 }
 
