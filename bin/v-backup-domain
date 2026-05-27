@@ -16,8 +16,8 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 WWW_DIR="/var/www"
-NGINX_CONF="$SPANEL_DIR/nginx/conf"
 BACKUP_DIR="/var/backups"
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #------------------------------------------------------------------------------
 # Check root
@@ -129,20 +129,6 @@ backup_domain() {
     else
         log_error "Backup that bai"
         return 1
-    fi
-
-    # Backup SSL if exists
-    if [[ -d "$SPANEL_DIR/ssl/$domain" ]]; then
-        local ssl_backup="$BACKUP_DIR/ssl_${domain}_${timestamp}.tar.gz"
-        tar -czf "$ssl_backup" -C "$SPANEL_DIR/ssl" "$domain" 2>/dev/null
-        log_info "Backup SSL thanh cong"
-    fi
-
-    # Backup nginx config if exists
-    if [[ -f "$NGINX_CONF/sites-available/$domain.conf" ]]; then
-        local conf_backup="$BACKUP_DIR/conf_${domain}_${timestamp}.tar.gz"
-        tar -czf "$conf_backup" -C "$NGINX_CONF/sites-available" "$domain.conf" 2>/dev/null
-        log_info "Backup config thanh cong"
     fi
 
     echo ""
