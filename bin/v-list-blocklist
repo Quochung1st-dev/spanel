@@ -1,0 +1,91 @@
+#!/bin/bash
+#==============================================================================
+# v-list-blocklist
+# Liet ke danh sach blocklist
+#==============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Load env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+BLOCKLIST_FILE="$SPANEL_DIR/waf/blocklist.conf"
+
+#------------------------------------------------------------------------------
+# Print header
+#------------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║         SPanel - List Blocklist            ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
+# List blocklist
+#------------------------------------------------------------------------------
+
+list_blocklist() {
+    echo -e "${YELLOW}Danh sach Blocklist:${NC}"
+    echo ""
+
+    if [[ ! -f "$BLOCKLIST_FILE" ]]; then
+        log_warn "File blocklist khong ton tai: $BLOCKLIST_FILE"
+        echo ""
+        echo "Tao file moi..."
+        mkdir -p "$(dirname "$BLOCKLIST_FILE")"
+        touch "$BLOCKLIST_FILE"
+        log_info "Da tao file blocklist"
+        return 0
+    fi
+
+    # Check if file is empty
+    if [[ ! -s "$BLOCKLIST_FILE" ]]; then
+        echo -e "  ${YELLOW}Blocklist trong${NC}"
+        echo ""
+        return 0
+    fi
+
+    # Extract and display IPs with comments
+    local count=0
+    while IFS= read -r line; do
+        # Skip empty lines
+        [[ -z "$line" ]] && continue
+
+        # Comment lines (metadata)
+        if [[ "$line" =~ ^# ]]; then
+            echo -e "  ${BLUE}$line${NC}"
+        # IP lines
+        elif [[ "$line" =~ ^[0-9] || "$line" =~ ^[a-fA-F0-9] ]]; then
+            ((count++))
+            echo -e "  ${RED}$count. $line${NC}"
+        fi
+    done < "$BLOCKLIST_FILE"
+
+    echo ""
+    echo -e "Tong cong: ${RED}$count${NC} IPs"
+    echo ""
+    echo "File: $BLOCKLIST_FILE"
+}
+
+#------------------------------------------------------------------------------
+# Main
+#------------------------------------------------------------------------------
+
+main() {
+    print_header
+    list_blocklist
+}
+
+main "$@"
