@@ -23,8 +23,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
 fi
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
-SPANEL_USER="${SPANEL_USER:-spanel}"
-SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
 
 # Parse arguments
 CLEAR_DATA=false
@@ -57,7 +55,7 @@ confirm_uninstall() {
     echo -e "${RED}========================================${NC}"
     echo ""
     echo "Thư mục SPanel: $SPANEL_DIR"
-    echo "User: $SPANEL_USER"
+    echo "User: $NGINX_USER"
     echo ""
     echo "Script này sẽ gỡ:"
     echo "  - OpenResty/Nginx"

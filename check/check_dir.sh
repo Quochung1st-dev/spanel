@@ -14,8 +14,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
 fi
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
-SPANEL_USER="${SPANEL_USER:-spanel}"
-SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -77,7 +75,7 @@ check_spanel_dirs() {
             missing_dirs+=("$dir")
         elif [[ -d "$dir" ]]; then
             local owner=$(stat -c '%U' "$dir" 2>/dev/null)
-            if [[ "$owner" != "$SPANEL_USER" ]]; then
+            if [[ "$owner" != "$NGINX_USER" ]]; then
                 wrong_owner+=("$dir:$owner")
             fi
         fi
@@ -124,9 +122,9 @@ create_dirs() {
 #------------------------------------------------------------------------------
 
 fix_ownership() {
-    log_fix "Sửa quyền sở hữu: $SPANEL_USER:$SPANEL_GROUP..."
+    log_fix "Sửa quyền sở hữu: $NGINX_USER:$NGINX_GROUP..."
 
-    chown -R "$SPANEL_USER:$SPANEL_GROUP" "$SPANEL_DIR"
+    chown -R "$NGINX_USER:$NGINX_GROUP" "$SPANEL_DIR"
 
     # WWW dir có thể thuộc root
     for dir in "${WWW_DIRS[@]}"; do
@@ -149,7 +147,7 @@ main() {
     echo "========================================"
 
     log_check ".env: SPANEL_DIR=$SPANEL_DIR"
-    log_check ".env: SPANEL_USER=$SPANEL_USER, SPANEL_GROUP=$SPANEL_GROUP"
+    log_check ".env: User=$NGINX_USER, Group=$NGINX_GROUP"
 
     if ! check_spanel_dirs; then
         create_dirs

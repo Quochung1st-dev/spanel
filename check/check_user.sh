@@ -14,8 +14,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
 fi
 
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
-SPANEL_USER="${SPANEL_USER:-spanel}"
-SPANEL_GROUP="${SPANEL_GROUP:-spanel}"
 NGINX_USER="${NGINX_USER:-www-data}"
 
 RED='\033[0;31m'
@@ -35,13 +33,13 @@ log_fix() { echo -e "${YELLOW}[FIX]${NC} $1"; }
 #------------------------------------------------------------------------------
 
 check_group() {
-    log_check "Kiểm tra group $SPANEL_GROUP..."
+    log_check "Kiểm tra group $NGINX_GROUP..."
 
-    if getent group "$SPANEL_GROUP" &>/dev/null; then
-        log_info "OK - Group $SPANEL_GROUP đã tồn tại"
+    if getent group "$NGINX_GROUP" &>/dev/null; then
+        log_info "OK - Group $NGINX_GROUP đã tồn tại"
         return 0
     else
-        log_warn "Group $SPANEL_GROUP chưa tồn tại"
+        log_warn "Group $NGINX_GROUP chưa tồn tại"
         return 1
     fi
 }
@@ -51,13 +49,13 @@ check_group() {
 #------------------------------------------------------------------------------
 
 check_user() {
-    log_check "Kiểm tra user $SPANEL_USER..."
+    log_check "Kiểm tra user $NGINX_USER..."
 
-    if id "$SPANEL_USER" &>/dev/null; then
-        log_info "OK - User $SPANEL_USER đã tồn tại (uid=$(id -u $SPANEL_USER))"
+    if id "$NGINX_USER" &>/dev/null; then
+        log_info "OK - User $NGINX_USER đã tồn tại (uid=$(id -u $NGINX_USER))"
         return 0
     else
-        log_warn "User $SPANEL_USER chưa tồn tại"
+        log_warn "User $NGINX_USER chưa tồn tại"
         return 1
     fi
 }
@@ -83,13 +81,13 @@ check_nginx_user() {
 #------------------------------------------------------------------------------
 
 check_user_groups() {
-    log_check "Kiểm tra user $SPANEL_USER thuộc group $SPANEL_GROUP..."
+    log_check "Kiểm tra user $NGINX_USER thuộc group $NGINX_GROUP..."
 
-    if id "$SPANEL_USER" | grep -q "$SPANEL_GROUP"; then
-        log_info "OK - User $SPANEL_USER thuộc group $SPANEL_GROUP"
+    if id "$NGINX_USER" | grep -q "$NGINX_GROUP"; then
+        log_info "OK - User $NGINX_USER thuộc group $NGINX_GROUP"
         return 0
     else
-        log_warn "User $SPANEL_USER không thuộc group $SPANEL_GROUP"
+        log_warn "User $NGINX_USER không thuộc group $NGINX_GROUP"
         return 1
     fi
 }
@@ -99,9 +97,9 @@ check_user_groups() {
 #------------------------------------------------------------------------------
 
 create_group() {
-    log_fix "Tạo group $SPANEL_GROUP..."
-    groupadd -r "$SPANEL_GROUP" 2>/dev/null || groupadd "$SPANEL_GROUP"
-    log_info "Đã tạo group $SPANEL_GROUP"
+    log_fix "Tạo group $NGINX_GROUP..."
+    groupadd -r "$NGINX_GROUP" 2>/dev/null || groupadd "$NGINX_GROUP"
+    log_info "Đã tạo group $NGINX_GROUP"
 }
 
 #------------------------------------------------------------------------------
@@ -109,9 +107,9 @@ create_group() {
 #------------------------------------------------------------------------------
 
 create_user() {
-    log_fix "Tạo user $SPANEL_USER..."
-    useradd -r -g "$SPANEL_GROUP" -s /bin/false -d "$SPANEL_DIR" -c "SPanel user" "$SPANEL_USER"
-    log_info "Đã tạo user $SPANEL_USER"
+    log_fix "Tạo user $NGINX_USER..."
+    useradd -r -g "$NGINX_GROUP" -s /bin/false -d "$SPANEL_DIR" -c "SPanel user" "$NGINX_USER"
+    log_info "Đã tạo user $NGINX_USER"
 }
 
 #------------------------------------------------------------------------------
@@ -134,9 +132,9 @@ create_nginx_user() {
 #------------------------------------------------------------------------------
 
 add_user_to_group() {
-    log_fix "Thêm $SPANEL_USER vào group $SPANEL_GROUP..."
-    usermod -aG "$SPANEL_GROUP" "$SPANEL_USER"
-    log_info "Đã thêm $SPANEL_USER vào group $SPANEL_GROUP"
+    log_fix "Thêm $NGINX_USER vào group $NGINX_GROUP..."
+    usermod -aG "$NGINX_GROUP" "$NGINX_USER"
+    log_info "Đã thêm $NGINX_USER vào group $NGINX_GROUP"
 }
 
 #------------------------------------------------------------------------------
@@ -149,7 +147,7 @@ main() {
     echo -e "${BLUE}Check User & Group${NC}"
     echo "========================================"
 
-    log_check ".env: SPANEL_USER=$SPANEL_USER, SPANEL_GROUP=$SPANEL_GROUP"
+    log_check ".env: User=$NGINX_USER, Group=$NGINX_GROUP"
     log_check ".env: NGINX_USER=$NGINX_USER"
 
     # Kiểm tra và tạo group

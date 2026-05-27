@@ -168,15 +168,15 @@ finish_installation() {
 
     # Phân quyền cho SPanel user
     log_info "Phân quyền thư mục..."
-    chown -R $SPANEL_USER:$SPANEL_GROUP "$SPANEL_DIR" 2>/dev/null || true
-    chown -R $SPANEL_USER:$SPANEL_GROUP /var/www 2>/dev/null || true
+    chown -R $NGINX_USER:$NGINX_GROUP "$SPANEL_DIR" 2>/dev/null || true
+    chown -R $NGINX_USER:$NGINX_GROUP /var/www 2>/dev/null || true
 
     # Tạo file empty cho logs nếu chưa có
     touch "$SPANEL_DIR/logs/nginx/access.log"
     touch "$SPANEL_DIR/logs/nginx/error.log"
     touch "$SPANEL_DIR/logs/waf/audit.log"
     touch "$SPANEL_DIR/logs/waf/error.log"
-    chown $SPANEL_USER:$SPANEL_GROUP "$SPANEL_DIR/logs"/*.log 2>/dev/null || true
+    chown $NGINX_USER:$NGINX_GROUP "$SPANEL_DIR/logs"/*.log 2>/dev/null || true
 
     # Test cấu hình Nginx
     log_info "Kiểm tra cấu hình Nginx..."
@@ -202,7 +202,7 @@ finish_installation() {
     echo ""
     echo -e "${YELLOW}Thông tin cài đặt:${NC}"
     echo "  Thư mục runtime : $SPANEL_DIR"
-    echo "  User             : $SPANEL_USER"
+    echo "  User             : $NGINX_USER"
     echo "  Nginx            : $OPENRESTY_DIR/nginx/sbin/nginx"
     echo ""
     echo -e "${YELLOW}Cấu trúc thư mục:${NC}"
@@ -254,7 +254,6 @@ main() {
     # 5. WAF rules
     # 6. CrowdSec (protection layer trên WAF)
     # 7. SSL certificates
-    # 8. User & Group (tạo cuối để tránh lỗi phân quyền)
     run_install_script "openresty.sh" "OpenResty (Nginx + LuaJIT)"
     run_install_script "redis.sh" "Redis"
     run_install_script "nginx.sh" "Nginx Config"
@@ -262,7 +261,6 @@ main() {
     run_install_script "waf.sh" "WAF"
     run_install_script "crowdsec.sh" "CrowdSec"
     run_install_script "ssl.sh" "SSL"
-    run_install_script "user.sh" "User & Group"
 
     # Cài đặt systemd service và logrotate
     install_systemd_service
