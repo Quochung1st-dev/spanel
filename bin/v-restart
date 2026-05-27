@@ -21,6 +21,7 @@ SPANEL_DIR="${SPANEL_DIR:-/var/server}"
 OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 NGINX_BIN="$OPENRESTY_DIR/nginx/sbin/nginx"
 NGINX_CONF="$SPANEL_DIR/nginx/conf/nginx.conf"
+NGINX_DEFAULT_CONF="$OPENRESTY_DIR/nginx/conf/nginx.conf"
 
 #------------------------------------------------------------------------------
 # Print header
@@ -84,16 +85,23 @@ start_services() {
     # Nginx / OpenResty
     if [[ -x "$NGINX_BIN" ]]; then
         log_info "Khoi dong Nginx..."
-        if "$NGINX_BIN" -t 2>/dev/null; then
-            "$NGINX_BIN" -c "$NGINX_CONF" 2>/dev/null
-            sleep 1
-            if pgrep -x nginx > /dev/null 2>&1; then
-                log_info "Nginx da khoi dong"
-            else
-                log_error "Nginx khong the khoi dong"
-            fi
+
+        # Thử SPanel config trước, fallback sang default
+        if "$NGINX_BIN" -t -c "$NGINX_CONF" 2>/dev/null; then
+            "$NGINX_BIN" -c "$NGINX_CONF"
+        elif "$NGINX_BIN" -t -c "$NGINX_DEFAULT_CONF" 2>/dev/null; then
+            log_warn "Dung cau hinh mac dinh thay vi SPanel config"
+            "$NGINX_BIN" -c "$NGINX_DEFAULT_CONF"
         else
             log_error "Nginx config loi, khong khoi dong duoc"
+            return 1
+        fi
+
+        sleep 1
+        if pgrep -x nginx > /dev/null 2>&1; then
+            log_info "Nginx da khoi dong"
+        else
+            log_error "Nginx khong the khoi dong"
         fi
     else
         log_warn "Nginx chua cai dat tai $NGINX_BIN"
