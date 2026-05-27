@@ -48,13 +48,13 @@ print_header() {
 
 usage() {
     echo ""
-    echo "Usage: v-restore-domain <file> [options]"
+    echo "Usage: v-restore-domain <domain> <backup_file> [options]"
     echo ""
     echo "Options:"
     echo "  --list     Danh sach backup hien co"
     echo ""
     echo "Examples:"
-    echo "  v-restore-domain /var/backups/example.com_20240101.tar.gz"
+    echo "  v-restore-domain example.com /var/backups/example.com_20240101.tar.gz"
     echo "  v-restore-domain --list"
     exit 1
 }
@@ -93,7 +93,13 @@ list_backups() {
 #------------------------------------------------------------------------------
 
 restore_domain() {
-    local backup_file=$1
+    local domain=$1
+    local backup_file=$2
+
+    if [[ -z "$domain" ]]; then
+        log_error "Vui long nhap domain"
+        return 1
+    fi
 
     if [[ -z "$backup_file" ]]; then
         log_error "Vui long nhap duong dan backup"
@@ -105,83 +111,52 @@ restore_domain() {
         return 1
     fi
 
-    # Get domain name from filename
-    local filename=$(basename "$backup_file")
-    local domain=$(echo "$filename" | sed 's/_[0-9].*//')
-
-    # Check if backup file is for SSL or config
-    local is_ssl=0
-    local is_conf=0
-    if [[ "$filename" == ssl_* ]]; then
-        is_ssl=1
-        domain=$(echo "$filename" | sed 's/ssl_//' | sed 's/_[0-9].*//')
-    elif [[ "$filename" == conf_* ]]; then
-        is_conf=1
-        domain=$(echo "$filename" | sed 's/conf_//' | sed 's/_[0-9].*//')
-    fi
-
     print_header
     echo ""
-    echo "Backup: $filename"
     echo "Domain: $domain"
+    echo "Backup: $(basename "$backup_file")"
     echo ""
 
-    if [[ "$is_ssl" == "1" ]]; then
-        # Restore SSL
-        log_info "Khoi phuc SSL..."
-        mkdir -p "$SPANEL_DIR/ssl/$domain"
-        tar -xzf "$backup_file" -C "$SPANEL_DIR/ssl" 2>/dev/null
-        log_info "SSL da khoi phuc thanh cong"
-        return 0
-    fi
-
-    if [[ "$is_conf" == "1" ]]; then
-        # Restore config
-        log_info "Khoi phuc config..."
-        tar -xzf "$backup_file" -C "$NGINX_CONF/sites-available" 2>/dev/null
-        log_info "Config da khoi phuc thanh cong"
-        return 0
-    fi
-
-    # Restore full domain
+    # Xoa domain cu neu da ton tai
     if [[ -d "$WWW_DIR/$domain" ]]; then
-        log_warn "Domain '$domain' da ton tai"
-        printf "Nhap 'yes' de ghi de: "
-        read -r confirm
-        if [[ "$confirm" != "yes" ]]; then
-            echo "Da huy."
-            return 1
-        fi
+        log_warn "Domain '$domain' da ton tai, dang xoa..."
         rm -rf "$WWW_DIR/$domain"
+        rm -f "$NGINX_CONF/sites-enabled/$domain.conf"
+        rm -f "$NGINX_CONF/sites-available/$domain.conf"
     fi
 
-    # Extract
+    # Giai nen backup vao thu muc domain
     log_info "Giai nen backup..."
+    mkdir -p "$WWW_DIR/$domain"
     tar -xzf "$backup_file" -C "$WWW_DIR" 2>/dev/null
 
-    if [[ -d "$WWW_DIR/$domain" ]]; then
-        log_info "Khoi phuc thanh cong!"
-        echo ""
-        echo "  Domain: $domain"
-        echo "  Root: $WWW_DIR/$domain/public_html"
-
-        # Auto enable
-        local conf_link="$NGINX_CONF/sites-available/$domain.conf"
-        local conf_target="$WWW_DIR/$domain/config/$domain.conf"
-        if [[ -f "$conf_target" ]] || [[ -e "$conf_target" ]]; then
-            if [[ ! -L "$conf_link" ]]; then
-                ln -sf "$conf_target" "$conf_link"
-                log_info "Da enable domain"
-            fi
-
-            # Reload nginx
-            bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
-        fi
-    else
-        log_error "Khoi phuc that bai"
+    if [[ ! -d "$WWW_DIR/$domain" ]]; then
+        log_error "Giai nen that bai"
         return 1
     fi
 
+    # Symlink vhost config
+    local conf_target="$WWW_DIR/$domain/config/$domain.conf"
+    if [[ -f "$conf_target" ]]; then
+        log_info "Tao symlink vhost..."
+        ln -sf "$conf_target" "$NGINX_CONF/sites-available/$domain.conf"
+        ln -sf "$NGINX_CONF/sites-available/$domain.conf" "$NGINX_CONF/sites-enabled/$domain.conf"
+        log_info "Da enable domain"
+    else
+        log_warn "Khong tim thay vhost config tai $conf_target"
+    fi
+
+    # Reload nginx
+    bash "$BIN_DIR/v-restart" reload-only 2>/dev/null || true
+
+    echo ""
+    log_info "Khoi phuc thanh cong!"
+    echo ""
+    echo "  Domain: $domain"
+    echo "  Root: $WWW_DIR/$domain/public_html"
+    if [[ -f "$conf_target" ]]; then
+        echo "  Config: $conf_target"
+    fi
     echo ""
 }
 
@@ -196,6 +171,7 @@ main() {
         usage
     fi
 
+    local domain=""
     local backup_file=""
 
     for arg in "$@"; do
@@ -208,12 +184,16 @@ main() {
                 usage
                 ;;
             *)
-                backup_file="$arg"
+                if [[ -z "$domain" ]]; then
+                    domain="$arg"
+                elif [[ -z "$backup_file" ]]; then
+                    backup_file="$arg"
+                fi
                 ;;
         esac
     done
 
-    restore_domain "$backup_file"
+    restore_domain "$domain" "$backup_file"
 }
 
 main "$@"
