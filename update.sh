@@ -134,12 +134,6 @@ update_data() {
         done
         log_info "Đã cập nhật waf rules và IP lists"
     fi
-
-    if [[ -f "$SCRIPT_DIR/.env" ]] && [[ ! -f "$SPANEL_DIR/.env" ]]; then
-        cp "$SCRIPT_DIR/.env" "$SPANEL_DIR/.env"
-        chmod 600 "$SPANEL_DIR/.env"
-        log_info "Đã copy .env"
-    fi
 }
 
 #------------------------------------------------------------------------------
