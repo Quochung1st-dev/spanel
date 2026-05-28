@@ -220,8 +220,18 @@ generate_domain() {
                 default=$(echo "${values[UPSTREAM]}" | sed 's|https\?://||' | sed 's|/.*||')
                 ;;
             "UPSTREAM_IP")
-                echo -n "Upstream IP (VD: 192.168.1.100): "
-                read default
+                # Resolve upstream host to IP
+                local upstream_host="${values[UPSTREAM_HOST]}"
+                if [[ -n "$upstream_host" ]]; then
+                    default=$(dig +short "$upstream_host" A 2>/dev/null | head -1)
+                    if [[ -z "$default" ]]; then
+                        default="$upstream_host"
+                    fi
+                fi
+                echo -n "Upstream IP [$default]: "
+                read input
+                values["$var"]="${input:-$default}"
+                continue
                 ;;
             "SSL_CERT")
                 default="$DOMAIN_CONFIG_DIR/$domain/ssl/fullchain.pem"
@@ -240,6 +250,9 @@ generate_domain() {
                 ;;
             "CACHE_ZONE")
                 default="spanel_cache_$(echo "$domain" | tr '.' '_')"
+                ;;
+            "CACHE_KEY")
+                default="$(echo "$domain" | tr '.' '_')"
                 ;;
             "LOG_DIR")
                 default="$DOMAIN_CONFIG_DIR/$domain/logs"
@@ -270,33 +283,45 @@ generate_domain() {
     # Check for cache config requirement
     if grep -q "{{CACHE_ZONE}}" "$template_file" 2>/dev/null; then
         local cache_output="$NGINX_CONF_DIR/conf.d/cache_$domain.conf"
+        local cache_template="$VHOST_DIR/template/cache.conf"
 
-        # Create cache config
-        cat > "$cache_output" << EOF
+        if [[ -f "$cache_template" ]]; then
+            # Use template file
+            local cache_content=""
+            while IFS= read -r line; do
+                for var in "${!values[@]}"; do
+                    line="${line//\{\{$var\}\}/${values[$var]}}"
+                done
+                cache_content="$cache_content$line"$'\n'
+            done < "$cache_template"
+            echo "$cache_content" > "$cache_output"
+        else
+            # Fallback: generate inline
+            cat > "$cache_output" << EOF
 # Cache config for $domain
-proxy_cache_path /var/cache/nginx/$domain
+proxy_cache_path ${values[CACHE_DIR]:-/var/cache/nginx/$domain}
                  levels=1:2
                  keys_zone=${values[CACHE_ZONE]:-spanel_cache_${domain//./_}}:10m
                  max_size=5g
                  inactive=60d
                  use_temp_path=off;
 
-# Skip cache maps
-map \$request_method \$skip_cache_method_$(echo "$domain" | tr '.' '_') {
+map \$request_method \$skip_cache_method_${values[CACHE_KEY]:-$(echo "$domain" | tr '.' '_')} {
     POST    1;
     default 0;
 }
 
-map \$request_uri \$skip_cache_query_$(echo "$domain" | tr '.' '_') {
+map \$request_uri \$skip_cache_query_${values[CACHE_KEY]:-$(echo "$domain" | tr '.' '_')} {
     ~*\?   1;
     default 0;
 }
 
-map \$http_cookie \$skip_cache_wp_$(echo "$domain" | tr '.' '_') {
+map \$http_cookie \$skip_cache_cookie_${values[CACHE_KEY]:-$(echo "$domain" | tr '.' '_')} {
     ~*wordpress_logged_in  1;
     default                0;
 }
 EOF
+        fi
         echo -e "${GREEN}Đã tạo: $cache_output${NC}"
     fi
 
