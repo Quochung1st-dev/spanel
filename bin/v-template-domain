@@ -1,0 +1,368 @@
+#!/bin/bash
+#==============================================================================
+# SPanel - Template Domain Generator
+# Tạo domain từ template với các biến tùy chỉnh
+#==============================================================================
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# SPanel directories
+SPANEL_DIR="${SPANEL_DIR:-/var/server}"
+
+# Load .env if exists
+if [[ -f "$SPANEL_DIR/.env" ]]; then
+    source "$SPANEL_DIR/.env"
+fi
+
+# Find vhost templates - follow symlinks to find source
+SOURCE_SCRIPT="${BASH_SOURCE[0]}"
+if [[ -L "$SOURCE_SCRIPT" ]]; then
+    SOURCE_SCRIPT="$(readlink -f "$SOURCE_SCRIPT")"
+fi
+SOURCE_DIR="$(cd "$(dirname "$SOURCE_SCRIPT")/.." && pwd)"
+
+# Priority: source data/vhost > installed conf/vhost
+if [[ -d "$SOURCE_DIR/data/vhost" ]] && [[ -n "$(ls -A "$SOURCE_DIR/data/vhost"/*.conf 2>/dev/null)" ]]; then
+    VHOST_DIR="$SOURCE_DIR/data/vhost"
+elif [[ -d "$SPANEL_DIR/nginx/conf/vhost" ]] && [[ -n "$(ls -A "$SPANEL_DIR/nginx/conf/vhost"/*.conf 2>/dev/null)" ]]; then
+    VHOST_DIR="$SPANEL_DIR/nginx/conf/vhost"
+else
+    VHOST_DIR=""
+fi
+DOMAIN_CONFIG_DIR="/var/www"
+NGINX_CONF_DIR="$SPANEL_DIR/nginx/conf"
+NGINX_BIN="$SPANEL_DIR/nginx/sbin/nginx"
+
+# Usage
+usage() {
+    echo -e "${BLUE}v-template-domain - Tạo domain từ template${NC}"
+    echo ""
+    echo -e "Usage: ${GREEN}v-template-domain${NC} ${YELLOW}<domain>${NC} ${CYAN}<template>${NC}"
+    echo ""
+    echo -e "Templates có sẵn:"
+    list_templates
+    echo ""
+    echo -e "Ví dụ:"
+    echo "  v-template-domain example.com proxy_cache"
+    echo "  v-template-domain example.com domain-ssl"
+    echo ""
+    echo -e "Lệnh hỗ trợ:"
+    echo "  v-template-domain --list          Liệt kê templates"
+    echo "  v-template-domain --info <tên>    Thông tin template"
+    echo "  v-template-domain --help          Trợ giúp"
+}
+
+# List templates
+list_templates() {
+    local count=0
+    local templates=""
+
+    # Find in main vhost directory
+    if [[ -d "$VHOST_DIR" ]]; then
+        templates=$(find "$VHOST_DIR" -maxdepth 1 -name "*.conf" 2>/dev/null)
+    fi
+
+    # Also check template subdirectory if exists
+    if [[ -d "$VHOST_DIR/template" ]]; then
+        templates="$templates $(find "$VHOST_DIR/template" -maxdepth 1 -name "*.conf" 2>/dev/null)"
+    fi
+
+    for template in $templates; do
+        if [ -f "$template" ]; then
+            local name=$(basename "$template" .conf)
+            local desc=$(grep -m1 "^# Description:" "$template" 2>/dev/null | sed 's/# Description: //')
+            if [ -n "$desc" ]; then
+                echo -e "  ${GREEN}$name${NC} - $desc"
+            else
+                echo -e "  ${GREEN}$name${NC}"
+            fi
+            ((count++))
+        fi
+    done
+    if [ $count -eq 0 ]; then
+        echo -e "  ${YELLOW}Không có template nào${NC}"
+    fi
+}
+
+# Get template info
+get_template_info() {
+    local template_name="$1"
+    local template_file=""
+
+    # Find template
+    if [ -f "$VHOST_DIR/$template_name.conf" ]; then
+        template_file="$VHOST_DIR/$template_name.conf"
+    elif [ -f "$VHOST_DIR/template/$template_name.conf" ]; then
+        template_file="$VHOST_DIR/template/$template_name.conf"
+    fi
+
+    if [ ! -f "$template_file" ]; then
+        echo -e "${RED}Template '$template_name' không tồn tại${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Template: $template_name${NC}"
+    echo "File: $template_file"
+    echo ""
+
+    # Extract variables
+    echo "Các biến cần nhập:"
+    local vars=$(grep -o '{{[A-Z_]*}}' "$template_file" | sort -u | tr -d '{}')
+    for var in $vars; do
+        echo -e "  - ${GREEN}$var${NC}"
+    done
+
+    echo ""
+
+    # Check for cache config requirement
+    if grep -q "{{CACHE_ZONE}}" "$template_file" 2>/dev/null; then
+        echo -e "${YELLOW}Template yêu cầu file cache config riêng${NC}"
+    fi
+
+    # Check for additional templates needed
+    if grep -q "{{CACHE_CONFIG}}" "$template_file" 2>/dev/null; then
+        echo -e "${YELLOW}Cần tạo thêm cache config file${NC}"
+    fi
+}
+
+# Parse template variables
+get_template_variables() {
+    local template_file="$1"
+    grep -o '{{[A-Z_]*}}' "$template_file" | sort -u | tr -d '{}'
+}
+
+# Generate domain from template
+generate_domain() {
+    local domain="$1"
+    local template_name="$2"
+    local template_file=""
+
+    # Validate domain
+    if [ -z "$domain" ] || [[ ! "$domain" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+        echo -e "${RED}Domain không hợp lệ${NC}"
+        exit 1
+    fi
+
+    # Find template
+    if [ -f "$VHOST_DIR/$template_name.conf" ]; then
+        template_file="$VHOST_DIR/$template_name.conf"
+    elif [ -f "$VHOST_DIR/template/$template_name.conf" ]; then
+        template_file="$VHOST_DIR/template/$template_name.conf"
+    else
+        echo -e "${RED}Template '$template_name' không tồn tại${NC}"
+        echo ""
+        echo "Templates có sẵn:"
+        list_templates
+        exit 1
+    fi
+
+    echo -e "${BLUE}Đang tạo domain: $domain${NC}"
+    echo ""
+
+    # Get variables
+    local variables=$(get_template_variables "$template_file")
+
+    # Create domain directory
+    mkdir -p "$DOMAIN_CONFIG_DIR/$domain/config"
+    mkdir -p "$DOMAIN_CONFIG_DIR/$domain/ssl"
+    mkdir -p "$DOMAIN_CONFIG_DIR/$domain/logs"
+    mkdir -p "$DOMAIN_CONFIG_DIR/$domain/public_html"
+
+    # Initialize associative array for values
+    declare -A values
+
+    # First pass: prompt for all user-input variables
+    for var in $variables; do
+        case "$var" in
+            "DOMAIN")
+                values["$var"]="$domain"
+                ;;
+            "DATE")
+                values["$var"]="$(date '+%Y-%m-%d %H:%M:%S')"
+                ;;
+            "UPSTREAM")
+                echo -n "Upstream URL (VD: https://example.com): "
+                read input
+                values["$var"]="$input"
+                ;;
+            "UPSTREAM_IP")
+                echo -n "Upstream IP (VD: 192.168.1.100): "
+                read input
+                values["$var"]="$input"
+                ;;
+            *)
+                # Other variables will be set in second pass
+                ;;
+        esac
+    done
+
+    # Second pass: auto-calculate derived variables and prompt for others
+    for var in $variables; do
+        if [[ -n "${values[$var]}" ]]; then
+            continue  # Already set
+        fi
+
+        local default=""
+
+        case "$var" in
+            "DOMAIN")
+                default="$domain"
+                ;;
+            "DATE")
+                default="$(date '+%Y-%m-%d %H:%M:%S')"
+                ;;
+            "UPSTREAM_HOST")
+                default=$(echo "${values[UPSTREAM]}" | sed 's|https\?://||' | sed 's|/.*||')
+                ;;
+            "UPSTREAM_IP")
+                echo -n "Upstream IP (VD: 192.168.1.100): "
+                read default
+                ;;
+            "SSL_CERT")
+                default="$DOMAIN_CONFIG_DIR/$domain/ssl/fullchain.pem"
+                ;;
+            "SSL_KEY")
+                default="$DOMAIN_CONFIG_DIR/$domain/ssl/privkey.pem"
+                ;;
+            "SSL_CERT_FILE")
+                default="$DOMAIN_CONFIG_DIR/$domain/ssl/server.crt"
+                ;;
+            "SSL_KEY_FILE")
+                default="$DOMAIN_CONFIG_DIR/$domain/ssl/server.key"
+                ;;
+            "CACHE_DIR")
+                default="/var/cache/nginx/$domain"
+                ;;
+            "CACHE_ZONE")
+                default="spanel_cache_$(echo "$domain" | tr '.' '_')"
+                ;;
+            "LOG_DIR")
+                default="$DOMAIN_CONFIG_DIR/$domain/logs"
+                ;;
+            *)
+                echo -n "Giá trị cho $var: "
+                read default
+                ;;
+        esac
+
+        values["$var"]="$default"
+    done
+
+    # Generate config file
+    local output_file="$DOMAIN_CONFIG_DIR/$domain/config/$domain.conf"
+    local content=""
+
+    while IFS= read -r line; do
+        for var in "${!values[@]}"; do
+            line="${line//\{\{$var\}\}/${values[$var]}}"
+        done
+        content="$content$line"$'\n'
+    done < "$template_file"
+
+    echo "$content" > "$output_file"
+    echo -e "${GREEN}Đã tạo: $output_file${NC}"
+
+    # Check for cache config requirement
+    if grep -q "{{CACHE_ZONE}}" "$template_file" 2>/dev/null; then
+        local cache_output="$NGINX_CONF_DIR/conf.d/cache_$domain.conf"
+
+        # Create cache config
+        cat > "$cache_output" << EOF
+# Cache config for $domain
+proxy_cache_path /var/cache/nginx/$domain
+                 levels=1:2
+                 keys_zone=${values[CACHE_ZONE]:-spanel_cache_${domain//./_}}:10m
+                 max_size=5g
+                 inactive=60d
+                 use_temp_path=off;
+
+# Skip cache maps
+map \$request_method \$skip_cache_method_$(echo "$domain" | tr '.' '_') {
+    POST    1;
+    default 0;
+}
+
+map \$request_uri \$skip_cache_query_$(echo "$domain" | tr '.' '_') {
+    ~*\?   1;
+    default 0;
+}
+
+map \$http_cookie \$skip_cache_wp_$(echo "$domain" | tr '.' '_') {
+    ~*wordpress_logged_in  1;
+    default                0;
+}
+EOF
+        echo -e "${GREEN}Đã tạo: $cache_output${NC}"
+    fi
+
+    # Check for additional cache config template
+    if grep -q "{{CACHE_CONFIG}}" "$template_file" 2>/dev/null; then
+        local cache_template="$VHOST_DIR/template/cache.conf"
+        if [ -f "$cache_template" ]; then
+            local cache_output="$NGINX_CONF_DIR/conf.d/cache_$domain.conf"
+            local cache_content=""
+
+            while IFS= read -r line; do
+                for var in "${!values[@]}"; do
+                    line="${line//\{\{$var\}\}/${values[$var]}}"
+                done
+                cache_content="$cache_content$line"$'\n'
+            done < "$cache_template"
+
+            echo "$cache_content" > "$cache_output"
+            echo -e "${GREEN}Đã tạo: $cache_output${NC}"
+        fi
+    fi
+
+    # Enable site
+    if [ -d "$NGINX_CONF_DIR/sites-enabled" ]; then
+        if [ ! -L "$NGINX_CONF_DIR/sites-enabled/$domain.conf" ]; then
+            ln -sf "$output_file" "$NGINX_CONF_DIR/sites-enabled/$domain.conf" 2>/dev/null
+        fi
+    fi
+
+    # Reload nginx
+    if [ -x "$NGINX_BIN" ]; then
+        echo -e "${YELLOW}Reloading nginx...${NC}"
+        $NGINX_BIN -c $NGINX_CONF_DIR/nginx.conf -s reload 2>/dev/null || echo -e "${YELLOW}Lưu ý: Cần reload nginx thủ công${NC}"
+    fi
+
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║       Hoàn tất!                        ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  Domain:   ${YELLOW}$domain${NC}"
+    echo -e "  Template: ${YELLOW}$template_name${NC}"
+    echo -e "  Config:   ${YELLOW}$output_file${NC}"
+    echo ""
+}
+
+# Main
+case "$1" in
+    --list|-l)
+        list_templates
+        ;;
+    --info|-i)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Cần chỉ định template${NC}"
+            exit 1
+        fi
+        get_template_info "$2"
+        ;;
+    --help|-h)
+        usage
+        ;;
+    *)
+        if [ -z "$1" ] || [ -z "$2" ]; then
+            usage
+            exit 1
+        fi
+        generate_domain "$1" "$2"
+        ;;
+esac

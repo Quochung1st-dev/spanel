@@ -148,6 +148,22 @@ install_bin_scripts() {
 }
 
 #------------------------------------------------------------------------------
+# Cài đặt vhost templates
+#------------------------------------------------------------------------------
+
+install_vhost_templates() {
+    log_info "Cài đặt vhost templates..."
+
+    if [[ -d "$SCRIPT_DIR/data/vhost" ]]; then
+        mkdir -p "$SPANEL_DIR/nginx/conf/vhost"
+        cp -r "$SCRIPT_DIR/data/vhost/"* "$SPANEL_DIR/nginx/conf/vhost/"
+        log_info "Đã copy vhost templates vào $SPANEL_DIR/nginx/conf/vhost"
+    else
+        log_warn "Không tìm thấy data/vhost"
+    fi
+}
+
+#------------------------------------------------------------------------------
 # Hoàn tất cài đặt
 #------------------------------------------------------------------------------
 
@@ -164,6 +180,7 @@ finish_installation() {
     mkdir -p "$SPANEL_DIR/lib"
     mkdir -p "$SPANEL_DIR/bin"
     mkdir -p "$SPANEL_DIR/backup"
+    mkdir -p "$SPANEL_DIR/nginx/conf/vhost"
     mkdir -p /var/www
 
     # Phân quyền cho SPanel user
@@ -261,6 +278,9 @@ main() {
     run_install_script "waf.sh" "WAF"
     run_install_script "crowdsec.sh" "CrowdSec"
     run_install_script "ssl.sh" "SSL"
+
+    # Copy vhost templates
+    install_vhost_templates
 
     # Cài đặt systemd service và logrotate
     install_systemd_service

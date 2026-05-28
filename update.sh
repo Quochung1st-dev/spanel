@@ -134,6 +134,12 @@ update_data() {
         done
         log_info "Đã cập nhật waf rules và IP lists"
     fi
+
+    if [[ -d "$SCRIPT_DIR/data/vhost" ]]; then
+        mkdir -p "$SPANEL_DIR/nginx/conf/vhost"
+        cp -rf "$SCRIPT_DIR/data/vhost/"* "$SPANEL_DIR/nginx/conf/vhost/"
+        log_info "Đã cập nhật vhost templates"
+    fi
 }
 
 #------------------------------------------------------------------------------

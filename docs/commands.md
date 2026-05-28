@@ -8,6 +8,7 @@
 | `v-delete-domain <domain> [options]` | Xóa domain |
 | `v-change-domain <cmd> <domain> [args]` | Thay đổi cấu hình |
 | `v-list-domain [domain]` | Liệt kê domain |
+| `v-template-domain <domain> <template>` | Tạo domain từ template |
 | `v-rebuild-domain <domain> [options]` | Rebuild domain |
 
 ## SSL
