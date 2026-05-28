@@ -8,7 +8,7 @@
 | `v-delete-domain <domain> [options]` | Xóa domain |
 | `v-change-domain <cmd> <domain> [args]` | Thay đổi cấu hình |
 | `v-list-domain [domain]` | Liệt kê domain |
-| `v-template-domain <domain> <template>` | Tạo domain từ template |
+| `v-template-domain <domain> <template> [ssl]` | Tạo domain từ template |
 | `v-rebuild-domain <domain> [options]` | Rebuild domain |
 
 ## SSL
@@ -90,3 +90,66 @@ v-add-ssl <domain> [type]
 |------|-------|
 | `letssl` | Let's Encrypt (mặc định) |
 | `ssl` | Self-signed certificate |
+
+### v-template-domain
+
+```bash
+v-template-domain <domain> <template> [ssl-type]
+```
+
+Tạo domain từ template với các biến tùy chỉnh.
+
+#### Templates có sẵn
+
+| Template | Mô tả |
+|---------|-------|
+| `template_nginx_cache_lua_proxy` | Nginx proxy với cache, Lua WAF, rate limiting |
+| `domain-ssl` | Domain đơn giản với SSL |
+| `domain` | Domain cơ bản |
+| `default` | Default template |
+| `panel` | SPanel panel |
+| `cache` | Chỉ cache config (không phải domain template) |
+
+#### SSL Types
+
+| Type | Mô tả |
+|------|-------|
+| `ssl` | Tạo self-signed certificate |
+| `letsencrypt` | Cài đặt Let's Encrypt certificate |
+| (không ghi) | Không tạo SSL |
+
+#### Ví dụ
+
+```bash
+# Tạo domain không có SSL
+v-template-domain example.com template_nginx_cache_lua_proxy
+
+# Tạo domain với self-signed SSL
+v-template-domain example.com template_nginx_cache_lua_proxy ssl
+
+# Tạo domain với Let's Encrypt
+v-template-domain example.com template_nginx_cache_lua_proxy letsencrypt
+```
+
+#### Tùy chọn khác
+
+```bash
+# Liệt kê templates
+v-template-domain --list
+
+# Xem thông tin template
+v-template-domain --info template_nginx_cache_lua_proxy
+
+# Trợ giúp
+v-template-domain --help
+```
+
+#### Output thư mục
+
+Khi tạo domain, script tạo:
+- `/var/www/<domain>/public_html/` - Webroot
+- `/var/www/<domain>/logs/` - Nginx logs
+- `/var/www/<domain>/config/` - Cấu hình domain
+- `/var/www/<domain>/ssl/` - SSL certificates (nếu dùng ssl-type)
+- `/var/server/nginx/conf/conf.d/cache_<domain>.conf` - Cache config (nếu template yêu cầu)
+- `/var/server/nginx/conf/sites-enabled/<domain>.conf` - Symlink đến config
