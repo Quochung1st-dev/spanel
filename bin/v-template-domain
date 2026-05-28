@@ -9,7 +9,12 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # SPanel directories
 SPANEL_DIR="${SPANEL_DIR:-/var/server}"
@@ -37,19 +42,103 @@ fi
 DOMAIN_CONFIG_DIR="/var/www"
 NGINX_CONF_DIR="$SPANEL_DIR/nginx/conf"
 NGINX_BIN="$SPANEL_DIR/nginx/sbin/nginx"
+OPENRESTY_DIR="${OPENRESTY_DIR:-/usr/local/openresty}"
 
+#------------------------------------------------------------------------------
+# SSL Generation Functions
+#------------------------------------------------------------------------------
+
+# Check for certbot
+check_certbot() {
+    command -v certbot &>/dev/null
+}
+
+# Create self-signed certificate
+create_self_signed() {
+    local domain="$1"
+    local cert_dir="$DOMAIN_CONFIG_DIR/$domain/ssl"
+    mkdir -p "$cert_dir"
+
+    log_info "Tạo self-signed certificate..."
+
+    OPENSSL_CONF=/usr/lib/ssl/openssl.cnf \
+    /usr/bin/openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$cert_dir/privkey.pem" \
+        -out "$cert_dir/fullchain.pem" \
+        -subj "/C=VN/ST=HCM/L=HCM/O=SPanel/CN=$domain" 2>/dev/null
+
+    # Create server.crt and server.key as symlinks/combined
+    ln -sf "fullchain.pem" "$cert_dir/server.crt" 2>/dev/null || true
+    ln -sf "privkey.pem" "$cert_dir/server.key" 2>/dev/null || true
+
+    log_info "Đã tạo self-signed certificate tại $cert_dir"
+}
+
+# Install Let's Encrypt certificate
+install_letsencrypt() {
+    local domain="$1"
+    local cert_dir="$DOMAIN_CONFIG_DIR/$domain/ssl"
+    local email="${2:-admin@$domain}"
+    mkdir -p "$cert_dir"
+
+    if ! check_certbot; then
+        log_warn "Certbot không có sẵn, chuyển sang self-signed"
+        create_self_signed "$domain"
+        return 1
+    fi
+
+    log_info "Cài đặt Let's Encrypt certificate..."
+
+    # Ensure public_html exists and is writable
+    mkdir -p "$DOMAIN_CONFIG_DIR/$domain/public_html"
+
+    local webroot="$DOMAIN_CONFIG_DIR/$domain/public_html"
+    mkdir -p "$webroot/.well-known/acme-challenge"
+
+    certbot certonly --webroot \
+        --webroot-path "$webroot" \
+        --domain "$domain" \
+        --domain "www.$domain" \
+        --email "$email" \
+        --agree-tos \
+        --noninteractive 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        # Copy certs to domain ssl directory
+        local le_cert="/etc/letsencrypt/live/$domain"
+        if [ -d "$le_cert" ]; then
+            cp "$le_cert/fullchain.pem" "$cert_dir/fullchain.pem"
+            cp "$le_cert/privkey.pem" "$cert_dir/privkey.pem"
+            ln -sf "fullchain.pem" "$cert_dir/server.crt" 2>/dev/null || true
+            ln -sf "privkey.pem" "$cert_dir/server.key" 2>/dev/null || true
+            log_info "Đã cài đặt Let's Encrypt certificate"
+        fi
+    else
+        log_warn "Let's Encrypt thất bại, chuyển sang self-signed"
+        create_self_signed "$domain"
+        return 1
+    fi
+}
+
+#------------------------------------------------------------------------------
 # Usage
 usage() {
     echo -e "${BLUE}v-template-domain - Tạo domain từ template${NC}"
     echo ""
-    echo -e "Usage: ${GREEN}v-template-domain${NC} ${YELLOW}<domain>${NC} ${CYAN}<template>${NC}"
+    echo -e "Usage: ${GREEN}v-template-domain${NC} ${YELLOW}<domain>${NC} ${CYAN}<template>${NC} ${PURPLE}[ssl-type]${NC}"
+    echo ""
+    echo -e "SSL Types:"
+    echo -e "  ${PURPLE}ssl${NC}       Self-signed certificate (mặc định khi dùng --ssl)"
+    echo -e "  ${PURPLE}letsencrypt${NC}  Let's Encrypt certificate"
+    echo -e "  ${PURPLE}(bỏ trống)${NC}   Không tạo SSL"
     echo ""
     echo -e "Templates có sẵn:"
     list_templates
     echo ""
     echo -e "Ví dụ:"
     echo "  v-template-domain example.com proxy_cache"
-    echo "  v-template-domain example.com domain-ssl"
+    echo "  v-template-domain example.com proxy_cache ssl"
+    echo "  v-template-domain example.com proxy_cache letsencrypt"
     echo ""
     echo -e "Lệnh hỗ trợ:"
     echo "  v-template-domain --list          Liệt kê templates"
@@ -140,6 +229,7 @@ get_template_variables() {
 generate_domain() {
     local domain="$1"
     local template_name="$2"
+    local ssl_type="$3"
     local template_file=""
 
     # Validate domain
@@ -269,12 +359,18 @@ generate_domain() {
     # Generate config file
     local output_file="$DOMAIN_CONFIG_DIR/$domain/config/$domain.conf"
     local content=""
+    local first=true
 
     while IFS= read -r line; do
         for var in "${!values[@]}"; do
             line="${line//\{\{$var\}\}/${values[$var]}}"
         done
-        content="$content$line"$'\n'
+        if $first; then
+            content="$line"
+            first=false
+        else
+            content="$content"$'\n'"$line"
+        fi
     done < "$template_file"
 
     echo "$content" > "$output_file"
@@ -288,11 +384,17 @@ generate_domain() {
         if [[ -f "$cache_template" ]]; then
             # Use template file
             local cache_content=""
+            local first=true
             while IFS= read -r line; do
                 for var in "${!values[@]}"; do
                     line="${line//\{\{$var\}\}/${values[$var]}}"
                 done
-                cache_content="$cache_content$line"$'\n'
+                if $first; then
+                    cache_content="$line"
+                    first=false
+                else
+                    cache_content="$cache_content"$'\n'"$line"
+                fi
             done < "$cache_template"
             echo "$cache_content" > "$cache_output"
         else
@@ -331,12 +433,18 @@ EOF
         if [ -f "$cache_template" ]; then
             local cache_output="$NGINX_CONF_DIR/conf.d/cache_$domain.conf"
             local cache_content=""
+            local first=true
 
             while IFS= read -r line; do
                 for var in "${!values[@]}"; do
                     line="${line//\{\{$var\}\}/${values[$var]}}"
                 done
-                cache_content="$cache_content$line"$'\n'
+                if $first; then
+                    cache_content="$line"
+                    first=false
+                else
+                    cache_content="$cache_content"$'\n'"$line"
+                fi
             done < "$cache_template"
 
             echo "$cache_content" > "$cache_output"
@@ -357,6 +465,22 @@ EOF
         $NGINX_BIN -c $NGINX_CONF_DIR/nginx.conf -s reload 2>/dev/null || echo -e "${YELLOW}Lưu ý: Cần reload nginx thủ công${NC}"
     fi
 
+    # Generate SSL certificate if requested
+    if [[ -n "$ssl_type" ]]; then
+        echo ""
+        case "$ssl_type" in
+            ssl|selfsigned)
+                create_self_signed "$domain"
+                ;;
+            letsencrypt|letssl)
+                install_letsencrypt "$domain"
+                ;;
+            *)
+                log_error "SSL type '$ssl_type' không hỗ trợ"
+                ;;
+        esac
+    fi
+
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║       Hoàn tất!                        ║${NC}"
@@ -365,10 +489,18 @@ EOF
     echo -e "  Domain:   ${YELLOW}$domain${NC}"
     echo -e "  Template: ${YELLOW}$template_name${NC}"
     echo -e "  Config:   ${YELLOW}$output_file${NC}"
+    if [[ -n "$ssl_type" ]]; then
+        echo -e "  SSL:      ${PURPLE}$ssl_type${NC}"
+        echo -e "  Cert:     ${YELLOW}$DOMAIN_CONFIG_DIR/$domain/ssl/fullchain.pem${NC}"
+        echo -e "  Key:      ${YELLOW}$DOMAIN_CONFIG_DIR/$domain/ssl/privkey.pem${NC}"
+    else
+        echo -e "  SSL:      ${YELLOW}Không (chưa tạo)${NC}"
+    fi
     echo ""
 }
 
 # Main
+ssl_type=""
 case "$1" in
     --list|-l)
         list_templates
@@ -388,6 +520,14 @@ case "$1" in
             usage
             exit 1
         fi
-        generate_domain "$1" "$2"
+
+        # Check for SSL type argument (ssl, letsencrypt, letssl)
+        case "$3" in
+            ssl|letsencrypt|letssl)
+                ssl_type="$3"
+                ;;
+        esac
+
+        generate_domain "$1" "$2" "$ssl_type"
         ;;
 esac
