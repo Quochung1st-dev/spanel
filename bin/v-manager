@@ -96,9 +96,7 @@ print_header() {
     [[ "$disk_num" -gt 70 && "$disk_num" -le 85 ]] && disk_color="$YELLOW"
 
     # Service status
-    local nginx_st=$(get_service_status nginx)
-    local redis_st=$(get_service_status redis-server)
-    local crowdsec_st=$(get_service_status crowdsec)
+    local openresty_st=$(if pgrep -x nginx > /dev/null 2>&1; then echo -e "${GREEN}ON${NC}"; else echo -e "${RED}OFF${NC}"; fi)
 
     # Progress bar
     progress_bar() {
@@ -121,7 +119,7 @@ print_header() {
     echo -e "${BLUE}║${NC}  ${CYAN}CPU:${NC}  ${cpu_color}$(progress_bar "$cpu") ${cpu}%${NC}     ${CYAN}RAM:${NC}  ${ram_color}$(progress_bar "$ram") ${ram}% ${ram_info}${NC}"
     echo -e "${BLUE}║${NC}  ${CYAN}Disk:${NC} ${disk_color}$(progress_bar "$disk_num") ${disk}${NC}      ${CYAN}Load:${NC} ${load}"
     echo -e "${BLUE}╠══════════════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${BLUE}║${NC}  ${CYAN}Domains:${NC} ${BOLD}${domain_count}${NC}    ${CYAN}Nginx:${NC} ${nginx_st}  ${CYAN}Redis:${NC} ${redis_st}  ${CYAN}CrowdSec:${NC} ${crowdsec_st}"
+    echo -e "${BLUE}║${NC}  ${CYAN}Domains:${NC} ${BOLD}${domain_count}${NC}    ${CYAN}OpenResty:${NC} ${openresty_st}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
