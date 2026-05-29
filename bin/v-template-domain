@@ -452,12 +452,7 @@ EOF
         fi
     fi
 
-    # Enable site
-    if [ -d "$NGINX_CONF_DIR/sites-enabled" ]; then
-        if [ ! -L "$NGINX_CONF_DIR/sites-enabled/$domain.conf" ]; then
-            ln -sf "$output_file" "$NGINX_CONF_DIR/sites-enabled/$domain.conf" 2>/dev/null
-        fi
-    fi
+    # Note: sites-enabled symlink no longer needed, using direct /var/www/*/config/*.conf include
 
     # Reload nginx
     if [ -x "$NGINX_BIN" ]; then
