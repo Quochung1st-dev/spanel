@@ -296,9 +296,6 @@ EOF
 
     chmod 644 "$conf_file"
 
-    # Symlink to sites-available
-    ln -sf "$conf_file" "$NGINX_CONF/sites-available/$domain.conf"
-
     log_info "Da tao proxy config"
 }
 
@@ -411,7 +408,7 @@ add_domain() {
     fi
 
     # Check if config exists
-    if [[ -f "$NGINX_CONF/sites-available/$domain.conf" ]]; then
+    if [[ -f "$WWW_DIR/$domain/config/$domain.conf" ]]; then
         log_error "Config cho $domain da ton tai"
         exit 1
     fi

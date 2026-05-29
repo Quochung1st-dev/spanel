@@ -403,19 +403,52 @@ menu_backup() {
                 print_header
                 echo -e "${CYAN}--- Restore domain ---${NC}"
                 echo ""
-                list_domains_numbered
-                if [[ $? -eq 0 ]]; then
-                    read -p "Chon domain [1-${#DOMAINS_LIST[@]}]: " d_choice
-                    if [[ "$d_choice" =~ ^[0-9]+$ ]] && [[ "$d_choice" -ge 1 ]] && [[ "$d_choice" -le "${#DOMAINS_LIST[@]}" ]]; then
-                        local domain="${DOMAINS_LIST[$((d_choice-1))]}"
-                        echo ""
-                        echo -e "${YELLOW}Backup cua $domain:${NC}"
-                        ls -lh /var/backups/ | grep "$domain" || echo "Khong tim thay backup"
-                        echo ""
-                        read -p "Nhap file backup: " file
-                        if [[ -n "$file" ]]; then
-                            v-restore-domain "$domain" "/var/backups/$file"
-                        fi
+                read -p "Nhap ten domain: " domain
+
+                if [[ -z "$domain" ]]; then
+                    echo -e "${RED}Domain khong duoc de trong${NC}"
+                    pause
+                    continue
+                fi
+
+                # Check if domain already exists
+                if [[ -d "/var/www/$domain" ]]; then
+                    echo -e "${RED}Domain '$domain' da ton tai${NC}"
+                    echo ""
+                    read -p "Nhap ten domain moi (hoac Enter de thoat): " domain
+                    [[ -z "$domain" ]] && continue
+                    if [[ -d "/var/www/$domain" ]]; then
+                        echo -e "${RED}Domain '$domain' da ton tai${NC}"
+                        pause
+                        continue
+                    fi
+                fi
+
+                echo ""
+
+                # List backup files numbered
+                local backups=()
+                local b_count=0
+                while IFS= read -r line; do
+                    backups+=("$line")
+                    ((b_count++))
+                done < <(ls -1t /var/backups/${domain}*.tar.gz /var/backups/${domain}*.zip 2>/dev/null)
+
+                if [[ $b_count -eq 0 ]]; then
+                    echo -e "${RED}Khong tim thay backup cho $domain${NC}"
+                else
+                    echo -e "${YELLOW}Backup cua $domain:${NC}"
+                    echo ""
+                    for ((i=0; i<b_count; i++)); do
+                        local f_name=$(basename "${backups[$i]}")
+                        local f_size=$(ls -lh "${backups[$i]}" | awk '{print $5}')
+                        local f_date=$(ls -l "${backups[$i]}" | awk '{print $6, $7, $8}')
+                        echo -e "  ${GREEN}$((i+1))${NC}) ${f_name}  ${f_size}  ${f_date}"
+                    done
+                    echo ""
+                    read -p "Chon backup [1-$b_count]: " b_choice
+                    if [[ "$b_choice" =~ ^[0-9]+$ ]] && [[ "$b_choice" -ge 1 ]] && [[ "$b_choice" -le "$b_count" ]]; then
+                        v-restore-domain "$domain" "${backups[$((b_choice-1))]}"
                     else
                         echo -e "${RED}Lua chon khong hop le${NC}"
                     fi

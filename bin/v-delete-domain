@@ -76,22 +76,16 @@ list_domains() {
 
     local count=0
 
-    if [[ -d "$NGINX_CONF/sites-available" ]]; then
-        for conf in "$NGINX_CONF/sites-available"/*.conf; do
-            [[ -f "$conf" ]] || [[ -L "$conf" ]] || continue
+    for dir in /var/www/*/; do
+        [[ -d "$dir" ]] || continue
+        local domain=$(basename "$dir")
 
-            local domain=$(basename "$conf" .conf)
-            [[ "$domain" == "default" ]] && continue
-            [[ "$domain" == "panel" ]] && continue
+        ((count++))
 
-            ((count++))
+        local size=$(du -sh "$dir" 2>/dev/null | awk '{print $1}' || echo "0")
 
-            local status="${YELLOW}disabled${NC}"
-            [[ -e "$NGINX_CONF/sites-enabled/$domain.conf" ]] && status="${GREEN}enabled${NC}"
-
-            printf "  ${CYAN}%-25s${NC} | $status\n" "$domain"
-        done
-    fi
+        printf "  ${CYAN}%-25s${NC} | %s\n" "$domain" "$size"
+    done
 
     echo ""
     echo "Total: $count domains"

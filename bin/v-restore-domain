@@ -128,8 +128,6 @@ restore_domain() {
         case "$choice" in
             1)
                 rm -rf "$WWW_DIR/$domain"
-                rm -f "$NGINX_CONF/sites-enabled/$domain.conf"
-                rm -f "$NGINX_CONF/sites-available/$domain.conf"
                 log_info "Da xoa domain cu"
                 ;;
             *)
